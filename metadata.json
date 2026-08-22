@@ -1,0 +1,8 @@
+{
+  "name": "분야별 전문 문서 생성기",
+  "description": "분야와 문서 유형에 맞춘 체계적인 전문 기획서/보고서, 16:9 고품질 PPT 프레젠테이션, 수식 연동 전문 엑셀 스프레드시트(.xlsx), 그리고 표준 결재선·도장 날인·A4 최적화 행정 양식 스튜디오 및 네이티브 워드(.docx) 내보내기를 지원하는 올인원 AI 비즈니스 오피스 스위트입니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
