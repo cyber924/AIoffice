@@ -28,6 +28,10 @@ export const FullscreenPresentationModal: React.FC<FullscreenPresentationModalPr
   const [showNotes, setShowNotes] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  const rawSlides = Array.isArray(presentation?.slides) && presentation.slides.length > 0
+    ? presentation.slides
+    : [];
+
   useEffect(() => {
     setCurrentIndex(initialSlideIndex);
   }, [initialSlideIndex, isOpen]);
@@ -46,12 +50,12 @@ export const FullscreenPresentationModal: React.FC<FullscreenPresentationModalPr
 
   // Keyboard navigation
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || rawSlides.length === 0) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight' || e.key === 'Space' || e.key === 'PageDown') {
         e.preventDefault();
-        setCurrentIndex((prev) => Math.min(prev + 1, presentation.slides.length - 1));
+        setCurrentIndex((prev) => Math.min(prev + 1, rawSlides.length - 1));
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
         setCurrentIndex((prev) => Math.max(prev - 1, 0));
@@ -64,11 +68,11 @@ export const FullscreenPresentationModal: React.FC<FullscreenPresentationModalPr
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, presentation.slides.length, onClose]);
+  }, [isOpen, rawSlides.length, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || rawSlides.length === 0) return null;
 
-  const currentSlide = presentation.slides[currentIndex];
+  const currentSlide = rawSlides[currentIndex] || rawSlides[0];
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -119,7 +123,7 @@ export const FullscreenPresentationModal: React.FC<FullscreenPresentationModalPr
             <SlideCanvas
               slide={currentSlide}
               theme={presentation.theme}
-              totalSlides={presentation.slides.length}
+              totalSlides={rawSlides.length}
               companyName={presentation.company}
               presentationTitle={presentation.title}
             />
@@ -159,14 +163,14 @@ export const FullscreenPresentationModal: React.FC<FullscreenPresentationModalPr
           </button>
 
           <span className="text-sm font-bold font-mono px-3 py-1 rounded-full bg-white/10">
-            {currentIndex + 1} / {presentation.slides.length}
+            {currentIndex + 1} / {rawSlides.length}
           </span>
 
           <button
             onClick={() =>
-              setCurrentIndex((prev) => Math.min(prev + 1, presentation.slides.length - 1))
+              setCurrentIndex((prev) => Math.min(prev + 1, rawSlides.length - 1))
             }
-            disabled={currentIndex === presentation.slides.length - 1}
+            disabled={currentIndex === rawSlides.length - 1}
             className="p-2 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-all"
           >
             <ChevronRight className="w-5 h-5" />

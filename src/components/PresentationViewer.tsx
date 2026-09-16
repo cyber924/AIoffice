@@ -27,6 +27,7 @@ import {
   Share2,
   Check,
   Edit3,
+  Upload,
 } from 'lucide-react';
 
 import confetti from 'canvas-confetti';
@@ -41,6 +42,7 @@ interface PresentationViewerProps {
     requestedLayout?: SlideLayoutType;
     customPrompt?: string;
   }) => Promise<SlideItem>;
+  onPublishToMarket?: () => void;
 }
 
 export const PresentationViewer: React.FC<PresentationViewerProps> = ({
@@ -48,6 +50,7 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
   onUpdatePresentation,
   onBackToForm,
   onRegenerateSlide,
+  onPublishToMarket,
 }) => {
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
@@ -58,7 +61,24 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [editedNotes, setEditedNotes] = useState('');
 
-  const currentSlide = presentation.slides[activeSlideIndex] || presentation.slides[0];
+  const rawSlides = Array.isArray(presentation?.slides) && presentation.slides.length > 0
+    ? presentation.slides
+    : [
+        {
+          id: 'slide_default_1',
+          slideNumber: 1,
+          layout: 'title' as SlideLayoutType,
+          category: 'EXECUTIVE PRESENTATION',
+          title: presentation?.title || '비즈니스 프레젠테이션',
+          subtitle: presentation?.subtitle || 'AI 기반 스마트 비즈니스 덱',
+          keyTakeaway: '핵심 전략과 비전을 명확하게 제시합니다.',
+          showImage: true,
+          content: {},
+          speakerNotes: '슬라이드 발표 대본입니다.',
+        }
+      ];
+
+  const currentSlide = rawSlides[activeSlideIndex] || rawSlides[0];
 
   useEffect(() => {
     if (currentSlide) {
@@ -72,6 +92,7 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
     onUpdatePresentation({
       ...presentation,
       theme: newTheme,
+      slides: rawSlides,
       metadata: {
         ...presentation.metadata,
         updatedAt: Date.now(),
@@ -83,7 +104,10 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
   const handleExportPptx = async () => {
     try {
       setIsExporting(true);
-      await exportToPptx(presentation);
+      await exportToPptx({
+        ...presentation,
+        slides: rawSlides,
+      });
       try {
         confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
       } catch {}
@@ -105,13 +129,13 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
     customPrompt?: string;
   }) => {
     const updatedSlide = await onRegenerateSlide({
-      presentationTitle: presentation.title,
+      presentationTitle: presentation?.title || '비즈니스 프레젠테이션',
       slide: currentSlide,
       requestedLayout: params.requestedLayout,
       customPrompt: params.customPrompt,
     });
 
-    const newSlides = [...presentation.slides];
+    const newSlides = [...rawSlides];
     newSlides[activeSlideIndex] = updatedSlide;
 
     onUpdatePresentation({
@@ -126,6 +150,7 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
 
   // Handle Duplicate Slide
   const handleDuplicateSlide = () => {
+    if (!currentSlide) return;
     const newSlide: SlideItem = {
       ...currentSlide,
       id: 'slide_' + Date.now(),
@@ -133,7 +158,7 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
       title: `${currentSlide.title} (복사본)`,
     };
 
-    const newSlides = [...presentation.slides];
+    const newSlides = [...rawSlides];
     newSlides.splice(activeSlideIndex + 1, 0, newSlide);
 
     // Re-number slides
@@ -151,12 +176,12 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
 
   // Handle Delete Slide
   const handleDeleteSlide = (index: number) => {
-    if (presentation.slides.length <= 1) {
+    if (rawSlides.length <= 1) {
       alert('최소 1장의 슬라이드는 유지되어야 합니다.');
       return;
     }
 
-    const newSlides = presentation.slides.filter((_, idx) => idx !== index);
+    const newSlides = rawSlides.filter((_, idx) => idx !== index);
     const renumbered = newSlides.map((s, idx) => ({
       ...s,
       slideNumber: idx + 1,
@@ -174,7 +199,7 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
 
   // Handle Save Notes
   const handleSaveNotes = () => {
-    const newSlides = [...presentation.slides];
+    const newSlides = [...rawSlides];
     newSlides[activeSlideIndex] = {
       ...currentSlide,
       speakerNotes: editedNotes,
@@ -246,6 +271,18 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
             <span>슬라이드 쇼</span>
           </button>
 
+          {/* Market Publish */}
+          {onPublishToMarket && (
+            <button
+              onClick={onPublishToMarket}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-xs transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              title="오픈 마켓플레이스에 PPT 발행하기"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>마켓 발행</span>
+            </button>
+          )}
+
           {/* Export to PPTX */}
           <button
             onClick={handleExportPptx}
@@ -264,11 +301,11 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
         <div className="w-48 sm:w-60 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0 overflow-y-auto p-3 space-y-3">
           <div className="flex items-center justify-between px-1 mb-1">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              슬라이드 목록 ({presentation.slides.length})
+              슬라이드 목록 ({rawSlides.length})
             </span>
           </div>
 
-          {presentation.slides.map((slide, idx) => {
+          {rawSlides.map((slide, idx) => {
             const isActive = idx === activeSlideIndex;
             return (
               <div
@@ -291,9 +328,9 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
                 <div className="w-full aspect-video rounded-lg overflow-hidden pointer-events-none transform origin-top-left">
                   <SlideCanvas
                     slide={slide}
-                    theme={presentation.theme}
-                    totalSlides={presentation.slides.length}
-                    companyName={presentation.company}
+                    theme={presentation?.theme || 'dark_navy'}
+                    totalSlides={rawSlides.length}
+                    companyName={presentation?.company}
                     isThumbnail={true}
                   />
                 </div>
@@ -322,10 +359,10 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
               {currentSlide && (
                 <SlideCanvas
                   slide={currentSlide}
-                  theme={presentation.theme}
-                  totalSlides={presentation.slides.length}
-                  companyName={presentation.company}
-                  presentationTitle={presentation.title}
+                  theme={presentation?.theme || 'dark_navy'}
+                  totalSlides={rawSlides.length}
+                  companyName={presentation?.company}
+                  presentationTitle={presentation?.title}
                 />
               )}
             </div>
@@ -345,16 +382,16 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
               </button>
 
               <span className="text-xs font-bold text-slate-700 font-mono px-3 py-1.5 bg-white border border-slate-200 rounded-xl shadow-2xs">
-                {activeSlideIndex + 1} / {presentation.slides.length}
+                {activeSlideIndex + 1} / {rawSlides.length}
               </span>
 
               <button
                 onClick={() =>
                   setActiveSlideIndex((prev) =>
-                    Math.min(prev + 1, presentation.slides.length - 1)
+                    Math.min(prev + 1, rawSlides.length - 1)
                   )
                 }
-                disabled={activeSlideIndex === presentation.slides.length - 1}
+                disabled={activeSlideIndex === rawSlides.length - 1}
                 className="p-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none transition-colors shadow-2xs cursor-pointer"
                 title="다음 슬라이드 (→)"
               >
@@ -381,7 +418,7 @@ export const PresentationViewer: React.FC<PresentationViewerProps> = ({
                     ? `https://picsum.photos/seed/biz_cov_${randomSeed}/1200/800`
                     : `https://picsum.photos/seed/biz_sld_${activeSlideIndex + 1}_${randomSeed}/600/400`;
 
-                  const newSlides = [...presentation.slides];
+                  const newSlides = [...rawSlides];
                   newSlides[activeSlideIndex] = {
                     ...currentSlide,
                     imageUrl: newImageUrl,

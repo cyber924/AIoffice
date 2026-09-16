@@ -12,7 +12,33 @@ import {
   ArrowRight,
   Plus,
   X,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Briefcase,
+  Megaphone,
+  Radio,
+  Handshake,
+  Compass,
+  Cpu,
+  TrendingUp,
+  Building2,
+  GraduationCap,
+  Scale,
+  Landmark,
+  Microscope,
+  Factory,
+  Truck,
+  Sliders,
+  Send,
+  LayoutList,
+  BarChart3,
+  Target,
+  FileCode,
+  LineChart,
+  BookOpen,
+  ScrollText,
+  DollarSign,
+  FileText,
+  Check,
 } from 'lucide-react';
 import {
   DocumentInputForm,
@@ -33,6 +59,42 @@ interface DocumentFormProps {
   isGenerating: boolean;
   onOpenTemplates: () => void;
 }
+
+// Map industry fields to matching icons and distinct subtle color tags
+const FIELD_ICONS: Record<IndustryField, { icon: React.FC<{ className?: string }>; tag: string }> = {
+  management: { icon: Briefcase, tag: '경영·전략' },
+  marketing: { icon: Megaphone, tag: '마케팅' },
+  advertising: { icon: Radio, tag: '광고·PR' },
+  sales: { icon: Handshake, tag: '영업·B2B' },
+  planning: { icon: Compass, tag: '기획·신사업' },
+  it_tech: { icon: Cpu, tag: 'IT·SW' },
+  ai_data: { icon: Sparkles, tag: 'AI·데이터' },
+  finance: { icon: TrendingUp, tag: '금융·투자' },
+  real_estate: { icon: Building2, tag: '부동산' },
+  education_hr: { icon: GraduationCap, tag: '교육·HR' },
+  legal: { icon: Scale, tag: '법률·규제' },
+  policy: { icon: Landmark, tag: '정책·공공' },
+  research: { icon: Microscope, tag: '연구·R&D' },
+  manufacturing: { icon: Factory, tag: '제조·품질' },
+  logistics: { icon: Truck, tag: '유통·물류' },
+  custom: { icon: Sliders, tag: '맞춤 분야' },
+};
+
+// Map document types to matching icons and framework badges
+const DOC_TYPE_META: Record<DocumentCategoryType, { icon: React.FC<{ className?: string }>; framework: string }> = {
+  business_plan: { icon: Briefcase, framework: '3C/4P · TAM-SAM-SOM · 로드맵' },
+  proposal: { icon: Send, framework: 'WBS 일정 · 기대효과 · 예산배분' },
+  prd_planning: { icon: LayoutList, framework: 'User Story · 기능 사양 · KPI' },
+  market_research: { icon: BarChart3, framework: '시장동향 · 고객조사 · 성장추정' },
+  competitor_analysis: { icon: Target, framework: 'SWOT · 포지셔닝 · 차별화' },
+  marketing_strategy: { icon: Megaphone, framework: '퍼널설계 · ROAS · 미디어믹스' },
+  tech_spec: { icon: FileCode, framework: '아키텍처 · API · 보안/인프라' },
+  executive_report: { icon: LineChart, framework: '성과진단 · 리스크 · 의사결정' },
+  curriculum_guide: { icon: BookOpen, framework: '학습목표 · 모듈설계 · 평가' },
+  policy_proposal: { icon: ScrollText, framework: '사회적배경 · 조례규정 · 파급력' },
+  ir_pitch: { icon: DollarSign, framework: 'IR스토리 · 3개년재무 · 밸류에이션' },
+  custom: { icon: FileText, framework: '자유형식 · 맞춤 구조화' },
+};
 
 export const DocumentForm: React.FC<DocumentFormProps> = ({
   initialData,
@@ -113,86 +175,127 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
-      {/* Hero Header */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 mb-3">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>AI 기반 지능형 전문 문서 아키텍처</span>
+    <div className="max-w-5xl mx-auto py-6 px-4 sm:px-6 space-y-6 animate-in fade-in duration-200">
+      {/* Hero Header Banner */}
+      <div className="bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-indigo-500/20">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-black">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>엔터프라이즈 AI 전문 문서 아키텍처 v2.5</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white">
+            분야별 전문 비즈니스 문서 생성
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            산업 도메인과 문서 유형을 선택하면, 인공지능이 정밀한 목차 구조화부터 실무 핵심 지표, 정량 분석 표, 구체적 실행 로드맵까지 완결성 높은 보고서를 완성합니다.
+          </p>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-          분야별 전문 문서 생성기
-        </h1>
-        <p className="mt-2.5 text-base text-slate-600 max-w-2xl mx-auto">
-          분야와 문서 유형을 선택하고 주제를 입력하면, AI가 체계적인 목차 설계부터
-          섹션별 심층 실무 콘텐츠와 데이터 표까지 완성된 전문 문서를 생성합니다.
-        </p>
+      </div>
 
-        {/* Quick Presets Bar */}
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          <span className="text-xs font-semibold text-slate-500 mr-1 flex items-center gap-1">
+      {/* Quick Presets Bar */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 mr-1 flex items-center gap-1.5">
             <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-            추천 프리셋:
+            <span>원클릭 추천 프리셋:</span>
           </span>
           {DOCUMENT_PRESETS.slice(0, 4).map(preset => (
             <button
               key={preset.id}
               type="button"
               onClick={() => applyPreset(preset.id)}
-              className="px-3 py-1 rounded-full text-xs font-medium bg-white text-slate-700 border border-slate-200 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/50 shadow-2xs transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/90 hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50/40 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
             >
               {preset.name}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={onOpenTemplates}
-            className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
-          >
-            전체 템플릿 보기 →
-          </button>
         </div>
+        <button
+          type="button"
+          onClick={onOpenTemplates}
+          className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all cursor-pointer shadow-2xs shrink-0 self-stretch md:self-auto text-center"
+        >
+          전체 템플릿 탐색 &rarr;
+        </button>
       </div>
 
       {/* Main Generator Form */}
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Step 1: Industry Field */}
-        <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
-              1
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs hover:shadow-md transition-shadow">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-5 mb-5 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center justify-center w-8 h-8 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-sm shadow-indigo-500/30">
+                01
+              </span>
+              <div>
+                <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-indigo-600" />
+                  <span>전문 산업 및 직무 분야 선택</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  해당 도메인의 전문 비즈니스 용어와 산업 표준 맥락을 반영합니다.
+                </p>
+              </div>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-blue-600" />
-              전문 분야 선택
-            </h2>
-            <span className="text-xs text-slate-500 ml-auto">
-              {INDUSTRY_FIELDS.length}개 산업 및 직무 분야 지원
+            <span className="inline-flex items-center gap-1.5 self-start sm:self-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-[11px] font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+              <span>{INDUSTRY_FIELDS.length}개 전문 도메인 지원</span>
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {INDUSTRY_FIELDS.map(f => {
               const isSelected = field === f.value;
+              const meta = FIELD_ICONS[f.value] || { icon: Briefcase, tag: '분야' };
+              const IconComponent = meta.icon;
+
               return (
                 <button
                   key={f.value}
                   type="button"
                   id={`field-btn-${f.value}`}
                   onClick={() => setField(f.value)}
-                  className={`p-3 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
+                  className={`group relative p-3.5 rounded-2xl text-left border transition-all duration-150 cursor-pointer flex flex-col justify-between min-h-[112px] ${
                     isSelected
-                      ? 'border-blue-600 bg-blue-50/70 shadow-xs ring-1 ring-blue-600/30'
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white'
+                      ? 'border-indigo-600 bg-indigo-50/50 shadow-md ring-2 ring-indigo-500/20 translate-y-[-1px]'
+                      : 'border-slate-200/90 hover:border-indigo-200 hover:bg-slate-50/70 bg-white hover:shadow-xs'
                   }`}
                 >
-                  <div className="flex items-center justify-between w-full">
-                    <span className={`text-sm font-bold ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
-                      {f.label}
-                    </span>
-                    {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
+                  {/* Top Bar: Icon + Label + Selection Badge */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-700'
+                        }`}
+                      >
+                        <IconComponent className="w-4 h-4" />
+                      </div>
+
+                      {isSelected ? (
+                        <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Check className="w-3 h-3 stroke-[3]" />
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity">
+                          선택
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="font-extrabold text-xs sm:text-sm tracking-tight leading-snug">
+                      <span className={isSelected ? 'text-indigo-950' : 'text-slate-900 group-hover:text-indigo-900'}>
+                        {f.label}
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
+
+                  {/* Sub Description */}
+                  <p className="text-[11px] text-slate-500 mt-2 line-clamp-2 leading-relaxed">
                     {f.description}
                   </p>
                 </button>
@@ -202,60 +305,100 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
 
           {/* Custom field input if selected */}
           {field === 'custom' && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                맞춤 분야명 직접 입력
+            <div className="mt-5 pt-5 border-t border-slate-100 animate-in fade-in-50 duration-200">
+              <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
+                맞춤 분야명 직접 입력 <span className="text-indigo-600">*</span>
               </label>
               <input
                 type="text"
                 value={customField}
                 onChange={e => setCustomField(e.target.value)}
-                placeholder="예: 우주항공, 친환경 신재생에너지, K-뷰티 글로벌 유통 등"
-                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                placeholder="예: 우주항공, 친환경 신재생에너지, K-뷰티 글로벌 유통, 바이오 헬스케어 등"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm bg-slate-50/50 focus:bg-white transition-all font-medium"
               />
             </div>
           )}
         </div>
 
         {/* Step 2: Document Type */}
-        <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
-              2
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs hover:shadow-md transition-shadow">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-5 mb-5 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center justify-center w-8 h-8 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-sm shadow-indigo-500/30">
+                02
+              </span>
+              <div>
+                <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-indigo-600" />
+                  <span>문서 유형 및 분석 프레임워크 선택</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  보고 목적에 최적화된 목차 구성과 구조화 분석 템플릿이 자동으로 연계됩니다.
+                </p>
+              </div>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4 text-blue-600" />
-              문서 유형 선택
-            </h2>
-            <span className="text-xs text-slate-500 ml-auto">
-              유형별 최적화된 프레임워크 적용
+            <span className="inline-flex items-center gap-1.5 self-start sm:self-center px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold border border-indigo-200/60">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+              <span>표준 프레임워크 내장</span>
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {DOCUMENT_TYPES.map(dt => {
               const isSelected = documentType === dt.value;
+              const meta = DOC_TYPE_META[dt.value] || { icon: FileText, framework: '표준 구조' };
+              const IconComponent = meta.icon;
+
               return (
                 <button
                   key={dt.value}
                   type="button"
                   id={`doctype-btn-${dt.value}`}
                   onClick={() => setDocumentType(dt.value)}
-                  className={`p-3.5 rounded-xl text-left border transition-all cursor-pointer ${
+                  className={`group relative p-4 rounded-2xl text-left border transition-all duration-150 cursor-pointer flex flex-col justify-between ${
                     isSelected
-                      ? 'border-blue-600 bg-blue-50/70 shadow-xs ring-1 ring-blue-600/30'
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white'
+                      ? 'border-indigo-600 bg-indigo-50/50 shadow-md ring-2 ring-indigo-500/20 translate-y-[-1px]'
+                      : 'border-slate-200/90 hover:border-indigo-200 hover:bg-slate-50/70 bg-white hover:shadow-xs'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`text-sm font-bold ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>
-                      {dt.label}
-                    </span>
-                    {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
+                  <div>
+                    {/* Header: Icon + Title + Check */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-700'
+                          }`}
+                        >
+                          <IconComponent className="w-4 h-4" />
+                        </div>
+                        <span className={`text-sm font-extrabold tracking-tight ${isSelected ? 'text-indigo-950' : 'text-slate-900 group-hover:text-indigo-900'}`}>
+                          {dt.label}
+                        </span>
+                      </div>
+
+                      {isSelected && (
+                        <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Check className="w-3 h-3 stroke-[3]" />
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Description */}
+                    <p className="text-xs text-slate-500 leading-relaxed mt-1.5 pl-9">
+                      {dt.description}
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-500 leading-snug">
-                    {dt.description}
-                  </p>
+
+                  {/* Bottom: Framework Badge */}
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                    <span className="text-slate-400 font-medium">연계 프레임워크:</span>
+                    <span className="font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                      {meta.framework}
+                    </span>
+                  </div>
                 </button>
               );
             })}
@@ -263,50 +406,55 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
 
           {/* Custom doc type input */}
           {documentType === 'custom' && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                맞춤 문서 유형명 직접 입력
+            <div className="mt-5 pt-5 border-t border-slate-100 animate-in fade-in-50 duration-200">
+              <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
+                맞춤 문서 유형명 직접 입력 <span className="text-indigo-600">*</span>
               </label>
               <input
                 type="text"
                 value={customDocumentType}
                 onChange={e => setCustomDocumentType(e.target.value)}
-                placeholder="예: 주간 핵심 이슈 브리프, 조직 개편안, 벤더 평가 보고서 등"
-                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                placeholder="예: 주간 핵심 이슈 브리프, 조직 개편안, 벤더 평가 보고서, RFP 제안 응답서 등"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm bg-slate-50/50 focus:bg-white transition-all font-medium"
               />
             </div>
           )}
         </div>
 
         {/* Step 3: Core Information */}
-        <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-5">
-          <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
-              3
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs hover:shadow-md transition-shadow space-y-6">
+          <div className="flex items-center gap-3 pb-5 border-b border-slate-100">
+            <span className="flex items-center justify-center w-8 h-8 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-sm shadow-indigo-500/30">
+              03
+            </span>
+            <div>
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <FileCheck2 className="w-5 h-5 text-indigo-600" />
+                <span>문서 핵심 주제 및 목표 설정</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                문서의 명확한 주제와 목적, 보고 대상자를 정의하여 정밀도를 높입니다.
+              </p>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <FileCheck2 className="w-4 h-4 text-blue-600" />
-              문서 기본 정보 및 목표
-            </h2>
           </div>
 
           {/* Topic */}
           <div>
-            <label className="block text-sm font-bold text-slate-800 mb-1.5">
-              문서 주제 / 핵심 제목 <span className="text-red-500">*</span>
+            <label className="block text-xs sm:text-sm font-extrabold text-slate-900 mb-2">
+              문서 주제 / 핵심 제목 <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               id="doc-topic-input"
               value={topic}
               onChange={e => setTopic(e.target.value)}
-              placeholder="예: 생성형 AI 기반 B2B 업무 자동화 플랫폼 신사업 런칭 계획"
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 text-sm"
+              placeholder="예: 생성형 AI 기반 B2B 업무 자동화 플랫폼 신사업 런칭 및 투자 유치 계획서"
+              className="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 text-xs sm:text-sm font-semibold bg-slate-50/40 focus:bg-white transition-all shadow-2xs"
               required
             />
           </div>
 
-          {/* Purpose */}
+          {/* Purpose & Target Audience */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -318,15 +466,14 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                 value={purpose}
                 onChange={e => setPurpose(e.target.value)}
                 placeholder="예: 2026년 상반기 이사회 승인 및 시리즈 A 투자 유치"
-                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm bg-slate-50/30 focus:bg-white transition-all font-medium"
               />
             </div>
 
-            {/* Target Audience */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
                 <Users2 className="w-3.5 h-3.5 text-slate-500" />
-                대상 독자 (Target Audience)
+                <span>대상 독자 (Target Audience)</span>
               </label>
               <input
                 type="text"
@@ -334,30 +481,35 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                 value={targetAudience}
                 onChange={e => setTargetAudience(e.target.value)}
                 placeholder="예: 경영진 (C-Level), 투자 심사역, 엔터프라이즈 고객사"
-                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm bg-slate-50/30 focus:bg-white transition-all font-medium"
               />
             </div>
           </div>
         </div>
 
         {/* Step 4: Advanced Specifications */}
-        <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
-          <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
-              4
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs hover:shadow-md transition-shadow space-y-6">
+          <div className="flex items-center gap-3 pb-5 border-b border-slate-100">
+            <span className="flex items-center justify-center w-8 h-8 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-sm shadow-indigo-500/30">
+              04
+            </span>
+            <div>
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5 text-indigo-600" />
+                <span>전문성 수준 및 분량 상세 설정</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                원하는 어조(Tone & Depth)와 섹션 구성 깊이를 정밀하게 제어합니다.
+              </p>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-blue-600" />
-              전문성 수준 및 분량 상세 설정
-            </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* Professional Level */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                <Gauge className="w-3.5 h-3.5 text-blue-600" />
-                전문성 수준 (Tone & Depth)
+                <Gauge className="w-3.5 h-3.5 text-indigo-600" />
+                <span>전문성 수준 (Tone & Depth)</span>
               </label>
               <div className="space-y-2">
                 {[
@@ -369,10 +521,10 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                 ].map(lvl => (
                   <label
                     key={lvl.value}
-                    className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                       professionalLevel === lvl.value
-                        ? 'border-blue-600 bg-blue-50/50'
-                        : 'border-slate-200 hover:bg-slate-50'
+                        ? 'border-indigo-600 bg-indigo-50/60 shadow-xs'
+                        : 'border-slate-200 hover:bg-slate-50/80 bg-white'
                     }`}
                   >
                     <input
@@ -381,18 +533,18 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                       value={lvl.value}
                       checked={professionalLevel === lvl.value}
                       onChange={() => setProfessionalLevel(lvl.value as ProfessionalLevel)}
-                      className="mt-1 text-blue-600 focus:ring-blue-500"
+                      className="mt-1 text-indigo-600 focus:ring-indigo-500"
                     />
                     <div>
-                      <div className="text-xs font-bold text-slate-900">{lvl.label}</div>
-                      <div className="text-[11px] text-slate-500">{lvl.desc}</div>
+                      <div className="text-xs font-extrabold text-slate-900">{lvl.label}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">{lvl.desc}</div>
                     </div>
                   </label>
                 ))}
               </div>
             </div>
 
-            {/* Document Length */}
+            {/* Document Length & Keywords */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-2">
                 문서 분량 및 깊이 (Sections & Scope)
@@ -405,10 +557,10 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                 ].map(len => (
                   <label
                     key={len.value}
-                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                       length === len.value
-                        ? 'border-blue-600 bg-blue-50/50'
-                        : 'border-slate-200 hover:bg-slate-50'
+                        ? 'border-indigo-600 bg-indigo-50/60 shadow-xs'
+                        : 'border-slate-200 hover:bg-slate-50/80 bg-white'
                     }`}
                   >
                     <input
@@ -417,11 +569,11 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                       value={len.value}
                       checked={length === len.value}
                       onChange={() => setLength(len.value as DocumentLength)}
-                      className="mt-1 text-blue-600 focus:ring-blue-500"
+                      className="mt-1 text-indigo-600 focus:ring-indigo-500"
                     />
                     <div>
-                      <div className="text-xs font-bold text-slate-900">{len.label}</div>
-                      <div className="text-[11px] text-slate-500">{len.desc}</div>
+                      <div className="text-xs font-extrabold text-slate-900">{len.label}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">{len.desc}</div>
                     </div>
                   </label>
                 ))}
@@ -429,9 +581,9 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
 
               {/* Keywords Input */}
               <div className="mt-5">
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
                   <Tag className="w-3.5 h-3.5 text-slate-500" />
-                  핵심 키워드 (Keywords)
+                  <span>필수 포함 핵심 키워드 (Keywords)</span>
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -440,15 +592,15 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                     onChange={e => setKeywordInput(e.target.value)}
                     onKeyDown={handleKeyDownKeyword}
                     placeholder="키워드 입력 후 Enter"
-                    className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                    className="flex-1 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs bg-slate-50/30 focus:bg-white"
                   />
                   <button
                     type="button"
                     onClick={handleAddKeyword}
-                    className="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    추가
+                    <span>추가</span>
                   </button>
                 </div>
 
@@ -458,13 +610,13 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                     {keywords.map(kw => (
                       <span
                         key={kw}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80"
                       >
                         {kw}
                         <button
                           type="button"
                           onClick={() => handleRemoveKeyword(kw)}
-                          className="hover:text-blue-900 cursor-pointer"
+                          className="hover:text-indigo-900 cursor-pointer"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -486,7 +638,7 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
               value={additionalRequirements}
               onChange={e => setAdditionalRequirements(e.target.value)}
               placeholder="예: 3개년 매출 추정치 표를 반드시 포함할 것, 엔터프라이즈 보안 및 규제 준수 방안을 중점 기술할 것 등"
-              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs bg-slate-50/30 focus:bg-white transition-all"
             />
           </div>
         </div>
@@ -497,30 +649,31 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
             type="submit"
             id="btn-generate-document"
             disabled={isGenerating || !topic.trim()}
-            className={`w-full py-4 px-6 rounded-2xl font-bold text-base flex items-center justify-center gap-3 shadow-md transition-all cursor-pointer ${
+            className={`w-full py-4 px-6 rounded-2xl font-extrabold text-base flex items-center justify-center gap-3 shadow-lg transition-all cursor-pointer ${
               isGenerating || !topic.trim()
-                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg active:scale-[0.99]'
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/30 hover:shadow-indigo-600/40 active:scale-[0.99]'
             }`}
           >
             {isGenerating ? (
               <>
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>AI가 전문 목차를 설계하고 섹션별 내용을 생성 중입니다...</span>
+                <span>AI가 전문 목차를 설계하고 섹션별 정밀 콘텐츠를 생성 중입니다...</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-5 h-5" />
-                <span>전문 문서 자동 생성 시작</span>
+                <span>전문 비즈니스 문서 자동 생성 시작</span>
                 <ArrowRight className="w-5 h-5 ml-1" />
               </>
             )}
           </button>
-          <p className="text-center text-xs text-slate-500 mt-2.5">
-            생성 후 목차 점프, 개별 섹션 실시간 재작성/보강, Markdown·PDF 내보내기가 가능합니다.
+          <p className="text-center text-xs text-slate-500 mt-3 font-medium">
+            생성 후 반응형 목차 내비게이션, 섹션별 원클릭 재작성/보강, 표 편집, Markdown 및 PDF 다운로드를 지원합니다.
           </p>
         </div>
       </form>
     </div>
   );
 };
+

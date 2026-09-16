@@ -1,9 +1,17 @@
-import PptxGenJS from 'pptxgenjs';
+import pptxgen from 'pptxgenjs';
 import { PresentationDocument, SlideItem } from '../types/presentation';
 import { PRESENTATION_THEMES } from '../constants/presentationThemes';
 
 export async function exportToPptx(presentation: PresentationDocument): Promise<void> {
-  const pptx = new PptxGenJS();
+  // Robust instantiation to avoid CommonJS/ESM bundling conflicts in Vite
+  let pptx: any;
+  if (typeof pptxgen === 'function') {
+    pptx = new pptxgen();
+  } else if (pptxgen && typeof (pptxgen as any).default === 'function') {
+    pptx = new (pptxgen as any).default();
+  } else {
+    pptx = new (pptxgen as any)();
+  }
   
   // Define 16:9 widescreen layout (13.333" x 7.5")
   pptx.defineLayout({ name: 'WIDE_16_9', width: 13.333, height: 7.5 });

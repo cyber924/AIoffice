@@ -115,22 +115,22 @@ export const PresentationForm: React.FC<PresentationFormProps> = ({
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Header Banner */}
-      <div className="text-center max-w-3xl mx-auto mb-10">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200/80 text-indigo-700 text-xs font-bold mb-3 shadow-2xs">
-          <Presentation className="w-4 h-4 text-indigo-600" />
-          <span>분야별 전문 AI 슬라이드 & PPT 엔진</span>
+      <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-purple-500/20">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/30 text-purple-300 text-xs font-black">
+            <Presentation className="w-3.5 h-3.5" />
+            <span>분야별 전문 AI 슬라이드 & PPT 엔진</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white">
+            아이디어 하나로 완성하는 고품질 프레젠테이션
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            16대 전문 도메인과 표준 슬라이드 덱 구조를 결합하여, 16:9 반응형 슬라이드 및 네이티브 파워포인트(.pptx) 파일을 즉시 생성합니다.
+          </p>
         </div>
-        <h1 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight">
-          아이디어 하나로 완성하는{' '}
-          <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-            고품질 프레젠테이션
-          </span>
-        </h1>
-        <p className="text-sm sm:text-base text-slate-500 mt-2">
-          16대 전문 도메인과 표준 슬라이드 덱 구조를 결합하여, 16:9 반응형 슬라이드 및 네이티브 파워포인트(.pptx) 파일을 즉시 생성합니다.
-        </p>
       </div>
 
       {/* Preset Quick Starters */}

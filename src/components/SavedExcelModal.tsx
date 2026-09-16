@@ -10,6 +10,7 @@ import {
   TrendingUp,
   Download,
   AlertTriangle,
+  Upload,
 } from 'lucide-react';
 import { exportToXlsx } from '../services/excelExportService';
 
@@ -19,6 +20,7 @@ interface SavedExcelModalProps {
   onClose: () => void;
   onSelectDocument: (doc: ExcelDocument) => void;
   onDeleteDocument: (docId: string) => void;
+  onPublishToMarket?: (doc: ExcelDocument) => void;
 }
 
 export const SavedExcelModal: React.FC<SavedExcelModalProps> = ({
@@ -27,6 +29,7 @@ export const SavedExcelModal: React.FC<SavedExcelModalProps> = ({
   onClose,
   onSelectDocument,
   onDeleteDocument,
+  onPublishToMarket,
 }) => {
   const [itemToDelete, setItemToDelete] = useState<ExcelDocument | null>(null);
 
@@ -116,6 +119,16 @@ export const SavedExcelModal: React.FC<SavedExcelModalProps> = ({
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                  {onPublishToMarket && (
+                    <button
+                      onClick={() => onPublishToMarket(doc)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 cursor-pointer transition-colors"
+                      title="오픈 마켓플레이스에 발행"
+                    >
+                      <Upload className="w-3 h-3" />
+                      <span>마켓 발행</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => exportToXlsx(doc)}
                     title="즉시 다운로드"

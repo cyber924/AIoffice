@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BusinessFormDocument } from '../types/formStudio';
+import { exportFormToDocx } from '../services/formWordExportService';
 import {
   FileText,
   Trash2,
@@ -9,6 +10,8 @@ import {
   ShieldCheck,
   Building,
   AlertTriangle,
+  Upload,
+  Download,
 } from 'lucide-react';
 
 interface SavedFormsModalProps {
@@ -17,6 +20,7 @@ interface SavedFormsModalProps {
   savedForms: BusinessFormDocument[];
   onSelectForm: (formDoc: BusinessFormDocument) => void;
   onDeleteForm: (formId: string) => void;
+  onPublishToMarket?: (formDoc: BusinessFormDocument) => void;
 }
 
 export const SavedFormsModal: React.FC<SavedFormsModalProps> = ({
@@ -25,6 +29,7 @@ export const SavedFormsModal: React.FC<SavedFormsModalProps> = ({
   savedForms,
   onSelectForm,
   onDeleteForm,
+  onPublishToMarket,
 }) => {
   const [itemToDelete, setItemToDelete] = useState<BusinessFormDocument | null>(null);
 
@@ -94,7 +99,34 @@ export const SavedFormsModal: React.FC<SavedFormsModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await exportFormToDocx(form);
+                      } catch (err: any) {
+                        alert('Word 문서 다운로드 실패: ' + (err.message || err));
+                      }
+                    }}
+                    className="p-2 rounded-lg text-slate-400 hover:text-amber-700 hover:bg-amber-50 cursor-pointer transition-colors"
+                    title="Word (.docx) 다운로드"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                  {onPublishToMarket && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPublishToMarket(form);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 cursor-pointer transition-colors"
+                      title="오픈 마켓플레이스에 발행"
+                    >
+                      <Upload className="w-3 h-3" />
+                      <span>마켓 발행</span>
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

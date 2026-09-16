@@ -47,6 +47,7 @@ export async function saveExcelDocument(excelDoc: ExcelDocument): Promise<void> 
       await setDoc(docRef, {
         ...excelDoc,
         userId: auth.currentUser.uid,
+        userEmail: auth.currentUser.email || '',
         updatedAt: Date.now(),
       });
     } catch (error) {
@@ -101,5 +102,31 @@ export async function deleteExcelDocument(id: string): Promise<void> {
     } catch (error) {
       console.warn('[Firestore] Failed to delete excel document from cloud:', error);
     }
+  }
+}
+
+export async function fetchAllExcelDocumentsForAdmin(): Promise<ExcelDocument[]> {
+  try {
+    const docsRef = collection(db, 'excel_documents');
+    const snapshot = await getDocs(docsRef);
+    const list: ExcelDocument[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      list.push({
+        id: docSnap.id,
+        userId: data.userId || '',
+        userEmail: data.userEmail || '',
+        title: data.title || '무제 엑셀',
+        sheets: data.sheets || [],
+        metadata: data.metadata || {
+          createdAt: data.createdAt || Date.now(),
+          updatedAt: data.updatedAt || Date.now(),
+        },
+      } as any);
+    });
+    return list.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0));
+  } catch (err) {
+    console.error('[Firestore] Error fetching admin excel documents:', err);
+    return [];
   }
 }

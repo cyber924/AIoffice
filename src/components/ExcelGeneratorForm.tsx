@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ExcelInputForm, ExcelTemplateType } from '../types/excel';
 import {
   FileSpreadsheet,
@@ -19,6 +19,7 @@ import {
 interface ExcelGeneratorFormProps {
   onGenerate: (data: ExcelInputForm) => Promise<void>;
   isLoading: boolean;
+  initialData?: Partial<ExcelInputForm>;
 }
 
 interface TemplateOption {
@@ -93,6 +94,7 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
 export const ExcelGeneratorForm: React.FC<ExcelGeneratorFormProps> = ({
   onGenerate,
   isLoading,
+  initialData,
 }) => {
   const [selectedTemplate, setSelectedTemplate] = useState<ExcelTemplateType>('monthly_sales_report');
   const [title, setTitle] = useState('2026년도 월별 매출 실적 및 목표 달성 종합 보고서');
@@ -103,8 +105,20 @@ export const ExcelGeneratorForm: React.FC<ExcelGeneratorFormProps> = ({
     '1월부터 12월까지의 월별 목표 매출액(연간 120억 원 기준)과 실제 달성 매출액을 비교하고, 엔터프라이즈 B2B 솔루션, 클라우드 SaaS, 전문 컨설팅 3개 사업 부문별 세부 매출 및 목표 달성율, 전년 대비 성장률(YoY)을 정밀 분석하는 전문 엑셀 보고서입니다.'
   );
   const [keyMetricsToInclude, setKeyMetricsToInclude] = useState(
-    '연간 총 매출액, 목표 달성율(%), 전년 대비 성장율(YoY), 영업이익률, 분기별 집계 합계(Q1~Q4), 최고 매출 달성 월'
+    '연간 총 매출액, 목표 달성율(%), 전년 대비 성장률(YoY), 영업이익률, 분기별 집계 합계(Q1~Q4), 최고 매출 달성 월'
   );
+
+  useEffect(() => {
+    if (initialData) {
+      if (initialData.templateType) setSelectedTemplate(initialData.templateType);
+      if (initialData.title) setTitle(initialData.title);
+      if (initialData.companyName) setCompanyName(initialData.companyName);
+      if (initialData.period) setPeriod(initialData.period);
+      if (initialData.currency) setCurrency(initialData.currency);
+      if (initialData.businessDescription) setBusinessDescription(initialData.businessDescription);
+      if (initialData.keyMetricsToInclude) setKeyMetricsToInclude(initialData.keyMetricsToInclude);
+    }
+  }, [initialData]);
 
   const handleTemplateChange = (templateId: ExcelTemplateType) => {
     setSelectedTemplate(templateId);

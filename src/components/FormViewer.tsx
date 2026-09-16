@@ -28,18 +28,21 @@ import {
   ShieldCheck,
   UserCheck,
   FileCheck,
+  Upload,
 } from 'lucide-react';
 
 interface FormViewerProps {
   document: BusinessFormDocument;
   onUpdateDocument?: (doc: BusinessFormDocument) => void;
   onBackToForm?: () => void;
+  onPublishToMarket?: () => void;
 }
 
 export const FormViewer: React.FC<FormViewerProps> = ({
   document: initialDoc,
   onUpdateDocument,
   onBackToForm,
+  onPublishToMarket,
 }) => {
   const [doc, setDoc] = useState<BusinessFormDocument>(initialDoc);
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
@@ -154,6 +157,17 @@ export const FormViewer: React.FC<FormViewerProps> = ({
               AI
             </span>
           </button>
+
+          {onPublishToMarket && (
+            <button
+              onClick={onPublishToMarket}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-black shadow-md flex items-center gap-1.5 transition-all cursor-pointer hover:scale-[1.02]"
+              title="오픈 마켓플레이스에 양식/공문서 발행하기"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>마켓 발행</span>
+            </button>
+          )}
 
           {onBackToForm && (
             <button

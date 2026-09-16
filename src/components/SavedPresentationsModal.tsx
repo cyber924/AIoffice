@@ -8,6 +8,7 @@ import {
   Trash2,
   Calendar,
   AlertTriangle,
+  Upload,
 } from 'lucide-react';
 
 interface SavedPresentationsModalProps {
@@ -16,6 +17,7 @@ interface SavedPresentationsModalProps {
   presentations: PresentationDocument[];
   onSelectPresentation: (pres: PresentationDocument) => void;
   onDeletePresentation: (id: string) => void;
+  onPublishToMarket?: (pres: PresentationDocument) => void;
 }
 
 export const SavedPresentationsModal: React.FC<SavedPresentationsModalProps> = ({
@@ -24,6 +26,7 @@ export const SavedPresentationsModal: React.FC<SavedPresentationsModalProps> = (
   presentations,
   onSelectPresentation,
   onDeletePresentation,
+  onPublishToMarket,
 }) => {
   const [itemToDelete, setItemToDelete] = useState<PresentationDocument | null>(null);
 
@@ -121,6 +124,20 @@ export const SavedPresentationsModal: React.FC<SavedPresentationsModalProps> = (
                     </span>
 
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      {onPublishToMarket && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPublishToMarket(pres);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 cursor-pointer transition-colors"
+                          title="오픈 마켓플레이스에 발행"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>마켓 발행</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => handleDownloadPptx(e, pres)}

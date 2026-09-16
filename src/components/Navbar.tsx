@@ -12,11 +12,12 @@ import {
   CheckCircle,
   Sparkles,
   ShieldCheck,
+  ShoppingBag,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isUserAdmin } from '../constants/adminConfig';
 
-export type AppMode = 'doc_generator' | 'presentation_generator' | 'excel_generator' | 'form_studio' | 'admin_console';
+export type AppMode = 'intro' | 'doc_generator' | 'presentation_generator' | 'excel_generator' | 'form_studio' | 'market' | 'admin_console';
 
 interface NavbarProps {
   savedCount: number;
@@ -68,7 +69,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <div
               className={`w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-xs transition-colors shrink-0 ${
-                appMode === 'form_studio'
+                appMode === 'intro'
+                  ? 'bg-gradient-to-tr from-indigo-600 to-purple-600 group-hover:from-indigo-700 group-hover:to-purple-700'
+                  : appMode === 'form_studio'
                   ? 'bg-amber-600 group-hover:bg-amber-700'
                   : appMode === 'excel_generator'
                   ? 'bg-emerald-600 group-hover:bg-emerald-700'
@@ -77,7 +80,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'bg-slate-800 group-hover:bg-slate-900'
               }`}
             >
-              {appMode === 'form_studio' ? (
+              {appMode === 'intro' ? (
+                <Sparkles className="w-4 h-4 text-white animate-pulse" />
+              ) : appMode === 'form_studio' ? (
                 <FileText className="w-4 h-4 text-white" />
               ) : appMode === 'excel_generator' ? (
                 <FileSpreadsheet className="w-4 h-4" />
@@ -87,15 +92,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <FileText className="w-4 h-4" />
               )}
             </div>
-            <div className="min-w-0 hidden md:block">
-              <span className="font-bold text-slate-900 text-sm sm:text-base tracking-tight whitespace-nowrap">
-                AI 전문 생성 스튜디오
+            <div className="min-w-0 flex items-center gap-1.5">
+              <span className="font-extrabold text-slate-900 text-sm sm:text-base tracking-tight whitespace-nowrap">
+                워크젠 AI
+              </span>
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[9px] font-bold tracking-tight uppercase shrink-0 border border-slate-200">
+                SaaS
               </span>
             </div>
           </div>
 
-          {/* Mode Switch Tabs (Doc, PPT, Excel, Form) */}
+          {/* Mode Switch Tabs (Intro, Doc, PPT, Excel, Form, Market) */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 shrink-0">
+            <button
+              onClick={() => onSelectAppMode('intro')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                appMode === 'intro'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>소개</span>
+            </button>
+
             <button
               onClick={() => onSelectAppMode('doc_generator')}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
@@ -142,8 +162,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <FileText className="w-3.5 h-3.5 text-amber-300" />
               <span>전문 양식</span>
-              <span className="text-[9px] font-black px-1 py-0.2 rounded bg-rose-500 text-white leading-tight">
-                NEW
+            </button>
+
+            <button
+              id="nav-btn-market"
+              onClick={() => onSelectAppMode('market')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                appMode === 'market'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs ring-1 ring-purple-400/40'
+                  : 'text-indigo-600 hover:text-indigo-800 bg-indigo-50/70 hover:bg-indigo-100/70'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-purple-400" />
+              <span>마켓</span>
+              <span className="text-[9px] font-black px-1.5 py-0.2 rounded-full bg-rose-500 text-white leading-tight animate-pulse">
+                HOT
               </span>
             </button>
           </div>

@@ -12,12 +12,24 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'cyber924@gmail.com' ||
+        request.auth.token.email == 'cyber924@naver.com'
+      );
+    }
+
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Auth tokens email verification (only for write operations to prevent spoofing)
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
     }
 
     function incoming() {
@@ -30,7 +42,6 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.uid is string &&
-             data.uid == request.auth.uid &&
              data.email is string &&
              data.email.size() <= 256;
     }
@@ -39,42 +50,163 @@ service cloud.firestore {
       return data.id is string &&
              data.id.size() <= 128 &&
              data.userId is string &&
-             data.userId == request.auth.uid &&
              data.title is string &&
-             data.title.size() <= 256 &&
-             data.field is string &&
-             data.field.size() <= 64 &&
-             data.documentType is string &&
-             data.documentType.size() <= 64;
+             data.title.size() <= 256;
     }
 
-    // User profiles collection
+    function isValidPresentation(data) {
+      return data.id is string &&
+             data.id.size() <= 128 &&
+             data.userId is string &&
+             data.title is string &&
+             data.title.size() <= 256;
+    }
+
+    function isValidExcelDoc(data) {
+      return data.id is string &&
+             data.id.size() <= 128 &&
+             data.userId is string &&
+             data.title is string &&
+             data.title.size() <= 256;
+    }
+
+    function isValidBusinessForm(data) {
+      return data.id is string &&
+             data.id.size() <= 128 &&
+             data.userId is string &&
+             data.title is string &&
+             data.title.size() <= 256;
+    }
+
+    function isValidKnowledgeHubItem(data) {
+      return data.id is string &&
+             data.id.size() <= 128 &&
+             data.title is string &&
+             data.title.size() <= 256 &&
+             data.type is string &&
+             data.type.size() <= 64 &&
+             data.content is string &&
+             data.content.size() <= 100000 &&
+             data.category is string &&
+             data.category.size() <= 128;
+    }
+
+    function isValidHelpContent(data) {
+      return data.id is string &&
+             data.id.size() <= 128 &&
+             data.type is string &&
+             data.type.size() <= 64 &&
+             data.title is string &&
+             data.title.size() <= 256 &&
+             data.content is string &&
+             data.content.size() <= 100000 &&
+             data.category is string &&
+             data.category.size() <= 128;
+    }
+
+    // User profiles collection & sub-collection
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
       allow create: if isOwner(userId) && isValidUser(incoming());
-      allow update: if isOwner(userId) && isValidUser(incoming()) && incoming().uid == existing().uid;
-      allow delete: if isOwner(userId);
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming()) && incoming().uid == existing().uid;
+      allow delete: if isOwner(userId) || isAdmin();
+
+      // Business forms subcollection
+      match /business_forms/{formId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) && isValidId(formId) && isValidBusinessForm(incoming());
+        allow update: if (isOwner(userId) || isAdmin()) && isValidId(formId) && isValidBusinessForm(incoming()) && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) || isAdmin();
+      }
     }
 
     // Documents collection
     match /documents/{documentId} {
-      allow get: if isSignedIn() && existing().userId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() &&
                       isValidId(documentId) &&
-                      incoming().userId == request.auth.uid &&
+                      (incoming().userId == request.auth.uid || isAdmin()) &&
                       isValidDocument(incoming());
       allow update: if isSignedIn() &&
                       isValidId(documentId) &&
-                      existing().userId == request.auth.uid &&
+                      (existing().userId == request.auth.uid || isAdmin()) &&
                       incoming().userId == existing().userId &&
                       isValidDocument(incoming());
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // Presentations collection
+    match /presentations/{presentationId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+                      isValidId(presentationId) &&
+                      (incoming().userId == request.auth.uid || isAdmin()) &&
+                      isValidPresentation(incoming());
+      allow update: if isSignedIn() &&
+                      isValidId(presentationId) &&
+                      (existing().userId == request.auth.uid || isAdmin()) &&
+                      incoming().userId == existing().userId &&
+                      isValidPresentation(incoming());
+      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // Excel documents collection
+    match /excel_documents/{excelDocId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+                      isValidId(excelDocId) &&
+                      (incoming().userId == request.auth.uid || isAdmin()) &&
+                      isValidExcelDoc(incoming());
+      allow update: if isSignedIn() &&
+                      isValidId(excelDocId) &&
+                      (existing().userId == request.auth.uid || isAdmin()) &&
+                      incoming().userId == existing().userId &&
+                      isValidExcelDoc(incoming());
+      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
     }
 
     // Connection testing doc
     match /test/connection {
       allow read: if true;
+    }
+
+    // Public Images Collection
+    match /public_images/{imageId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(imageId);
+    }
+
+    // Knowledge Hub Collection
+    match /knowledge_hub/{knowledgeId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidId(knowledgeId) && isValidKnowledgeHubItem(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Help Contents Collection
+    match /help_contents/{helpId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidId(helpId) && isValidHelpContent(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Public Market Items Collection (Open Marketplace)
+    match /market_items/{marketItemId} {
+      // Anyone (including unauthenticated guests) can view published market documents
+      allow read: if true;
+      allow create: if isSignedIn() && isValidId(marketItemId);
+      allow update: if isSignedIn() || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'downloadCount', 'likeCount', 'remixCount']));
+      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // Support collectionGroup query for business forms
+    match /{path=**}/business_forms/{formId} {
+      allow read: if isSignedIn() && (isAdmin() || (resource != null && resource.data.userId == request.auth.uid));
+      allow write: if isSignedIn() && (isAdmin() || (resource != null && resource.data.userId == request.auth.uid) || (incoming() != null && incoming().userId == request.auth.uid));
     }
   }
 }

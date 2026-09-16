@@ -8,6 +8,7 @@ import {
   deleteDoc,
   query,
   where,
+  collectionGroup,
 } from 'firebase/firestore';
 
 const LOCAL_STORAGE_FORMS_KEY = 'domain_doc_generator_saved_forms_v1';
@@ -49,6 +50,7 @@ export async function saveBusinessForm(formDoc: BusinessFormDocument): Promise<v
       await setDoc(docRef, {
         ...formDoc,
         userId: user.uid,
+        userEmail: user.email || '',
         updatedAt: Date.now(),
       });
     } catch (err) {
@@ -95,4 +97,49 @@ export async function deleteBusinessForm(formId: string): Promise<void> {
       console.warn('Firestore form delete failed:', err);
     }
   }
+}
+
+// Admin function to delete a business form belonging to any user
+export async function deleteBusinessFormForAdmin(userId: string, formId: string): Promise<void> {
+  if (db) {
+    try {
+      const docRef = doc(db, 'users', userId, 'business_forms', formId);
+      await deleteDoc(docRef);
+    } catch (err) {
+      console.error('[Firestore] Failed to delete business form for admin:', err);
+      throw err;
+    }
+  }
+}
+
+export async function fetchAllBusinessFormsForAdmin(): Promise<BusinessFormDocument[]> {
+  if (db) {
+    try {
+      const groupQuery = collectionGroup(db, 'business_forms');
+      const snap = await getDocs(groupQuery);
+      const list: BusinessFormDocument[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        list.push({
+          id: d.id,
+          userId: data.userId || '',
+          userEmail: data.userEmail || '',
+          title: data.title || '무제 양식',
+          field: data.field || '',
+          category: data.category || '',
+          formFields: data.formFields || [],
+          generatedMarkdown: data.generatedMarkdown || '',
+          metadata: data.metadata || {
+            createdAt: data.createdAt || Date.now(),
+            updatedAt: data.updatedAt || Date.now(),
+          },
+        } as any);
+      });
+      return list.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0));
+    } catch (err) {
+      console.error('[Firestore] Error fetching admin business forms:', err);
+      return [];
+    }
+  }
+  return [];
 }

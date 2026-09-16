@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   FileCheck2,
@@ -19,6 +19,7 @@ import { BusinessFormType, BusinessFormInput } from '../types/formStudio';
 interface FormGeneratorFormProps {
   onSubmit: (formData: BusinessFormInput) => void;
   isLoading: boolean;
+  initialData?: Partial<BusinessFormInput>;
 }
 
 interface FormTypeOption {
@@ -123,6 +124,7 @@ export const FORM_PRESETS: FormTypeOption[] = [
 export const FormGeneratorForm: React.FC<FormGeneratorFormProps> = ({
   onSubmit,
   isLoading,
+  initialData,
 }) => {
   const [selectedType, setSelectedType] = useState<BusinessFormType>('proposal_approval');
   const [title, setTitle] = useState(FORM_PRESETS[0].defaultTitle);
@@ -135,6 +137,22 @@ export const FormGeneratorForm: React.FC<FormGeneratorFormProps> = ({
   const [totalBudget, setTotalBudget] = useState('15,000,000원');
   const [targetDate, setTargetDate] = useState('2026년 09월 01일');
   const [keyDetails, setKeyDetails] = useState(FORM_PRESETS[0].defaultDetails);
+
+  useEffect(() => {
+    if (initialData) {
+      if (initialData.formType) setSelectedType(initialData.formType);
+      if (initialData.title) setTitle(initialData.title);
+      if (initialData.drafterName) setDrafterName(initialData.drafterName);
+      if (initialData.drafterDepartment) setDrafterDepartment(initialData.drafterDepartment);
+      if (initialData.drafterPosition) setDrafterPosition(initialData.drafterPosition);
+      if (initialData.companyName) setCompanyName(initialData.companyName);
+      if (initialData.recipientName) setRecipientName(initialData.recipientName);
+      if (initialData.recipientCompany) setRecipientCompany(initialData.recipientCompany);
+      if (initialData.totalBudget) setTotalBudget(initialData.totalBudget);
+      if (initialData.targetDate) setTargetDate(initialData.targetDate);
+      if (initialData.keyDetails) setKeyDetails(initialData.keyDetails);
+    }
+  }, [initialData]);
 
   const handleSelectType = (preset: FormTypeOption) => {
     setSelectedType(preset.type);

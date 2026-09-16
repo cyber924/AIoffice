@@ -24,24 +24,125 @@
         "title": { "type": "string", "maxLength": 256 },
         "field": { "type": "string", "maxLength": 64 },
         "documentType": { "type": "string", "maxLength": 64 },
-        "topic": { "type": "string", "maxLength": 512 },
-        "tone": { "type": "string", "maxLength": 64 },
-        "outputLength": { "type": "string", "maxLength": 64 },
-        "isFavorite": { "type": "boolean" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "title", "field", "documentType"]
+    },
+    "PresentationItem": {
+      "title": "PresentationItem",
+      "description": "Presentation deck document stored in Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "theme": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "title"]
+    },
+    "ExcelItem": {
+      "title": "ExcelItem",
+      "description": "Excel spreadsheet document stored in Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "title"]
+    },
+    "BusinessFormItem": {
+      "title": "BusinessFormItem",
+      "description": "Business form and official document stored under user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "title"]
+    },
+    "PublicImageItem": {
+      "title": "PublicImageItem",
+      "description": "Public shared image asset stored as a separate document to avoid the 1MB Firestore limit, restricted to 200KB base64 payloads.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "category": { "type": "string", "maxLength": 64 },
+        "productType": { "type": "string", "maxLength": 64 },
+        "dataUrl": { "type": "string", "maxLength": 300000 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "title", "category", "productType", "dataUrl"]
+    },
+    "KnowledgeHubItem": {
+      "title": "KnowledgeHubItem",
+      "description": "Knowledge Hub intelligence unit storing market facts and generated business templates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "type": { "type": "string", "maxLength": 64 },
+        "content": { "type": "string", "maxLength": 100000 },
+        "sourceUrl": { "type": "string", "maxLength": 1024 },
+        "keywords": { "type": "string", "maxLength": 256 },
+        "category": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "title", "type", "content", "category", "createdAt"]
+    },
+    "HelpContentItem": {
+      "title": "HelpContentItem",
+      "description": "Service help contents including announcements, FAQs, and usage manuals",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "maxLength": 64, "enum": ["announcement", "faq", "manual"] },
+        "title": { "type": "string", "maxLength": 256 },
+        "content": { "type": "string", "maxLength": 100000 },
+        "category": { "type": "string", "maxLength": 128 },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },
-      "required": ["id", "userId", "title", "field", "documentType", "topic"]
+      "required": ["id", "type", "title", "content", "category", "createdAt"]
     }
   },
   "firestore": {
+    "/help_contents/{helpId}": {
+      "schema": "HelpContentItem",
+      "description": "Stores Announcements, FAQ, and Usage Manuals"
+    },
+    "/knowledge_hub/{knowledgeId}": {
+      "schema": "KnowledgeHubItem",
+      "description": "Stores professional knowledge assets and fact sheets accessible across the app"
+    },
+    "/public_images/{imageId}": {
+      "schema": "PublicImageItem",
+      "description": "Publicly readable shared images, writeable only by system admins"
+    },
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "Stores user profiles with owner-only access"
     },
+    "/users/{userId}/business_forms/{formId}": {
+      "schema": "BusinessFormItem",
+      "description": "Stores business forms belonging to a specific user"
+    },
     "/documents/{documentId}": {
       "schema": "DocumentItem",
       "description": "Stores professional documents generated by authenticated users"
+    },
+    "/presentations/{presentationId}": {
+      "schema": "PresentationItem",
+      "description": "Stores presentation decks generated by authenticated users"
+    },
+    "/excel_documents/{excelDocId}": {
+      "schema": "ExcelItem",
+      "description": "Stores spreadsheet models generated by authenticated users"
     }
   }
 }

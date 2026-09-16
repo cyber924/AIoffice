@@ -7,9 +7,12 @@ import {
   FileCode,
   FileText,
   Check,
-  Share2
+  Share2,
+  Globe
 } from 'lucide-react';
 import { GeneratedDocument } from '../types/document';
+import { generateExecutiveHtmlDocument } from '../utils/htmlDocumentGenerator';
+import { exportDocToDocx } from '../services/docWordExportService';
 import confetti from 'canvas-confetti';
 
 interface ExportModalProps {
@@ -125,6 +128,68 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
         {/* Options List */}
         <div className="p-5 space-y-3">
+          {/* MS Word (.docx) Download */}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await exportDocToDocx(document);
+                try {
+                  confetti({ particleCount: 50, spread: 70, origin: { y: 0.7 } });
+                } catch {}
+              } catch (err) {
+                console.error('Word export error:', err);
+                alert('Word 문서 생성 중 오류가 발생했습니다.');
+              }
+            }}
+            className="w-full p-3.5 rounded-xl border-2 border-blue-600 bg-blue-50/80 hover:bg-blue-100 transition-all flex items-center justify-between group cursor-pointer text-left shadow-xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-blue-950 flex items-center gap-2">
+                  <span>Microsoft Word (.docx) 파일 다운로드</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white font-bold">표준</span>
+                </div>
+                <div className="text-[11px] text-blue-800">
+                  표지, 요약 박스, 목차, 서식 표가 적용된 완성형 Word (.docx) 문서
+                </div>
+              </div>
+            </div>
+            <Download className="w-4 h-4 text-blue-600 group-hover:translate-y-0.5 transition-transform" />
+          </button>
+
+          {/* Executive Styled HTML Download */}
+          <button
+            type="button"
+            onClick={() =>
+              handleDownloadFile(
+                `${sanitizedTitle}_보고서.html`,
+                generateExecutiveHtmlDocument(document),
+                'text/html;charset=utf-8'
+              )
+            }
+            className="w-full p-3.5 rounded-xl border-2 border-blue-500 bg-blue-50/50 hover:bg-blue-100/60 transition-all flex items-center justify-between group cursor-pointer text-left shadow-2xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                <Globe className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-blue-950 flex items-center gap-2">
+                  <span>프리미엄 HTML 웹 보고서 (.html) 다운로드</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white font-bold">추천</span>
+                </div>
+                <div className="text-[11px] text-blue-800">
+                  대기업/정부과제 표준 표, 요약 박스, 인쇄/PDF 기능 내장 완성형 HTML
+                </div>
+              </div>
+            </div>
+            <Download className="w-4 h-4 text-blue-600 group-hover:translate-y-0.5 transition-transform" />
+          </button>
+
           {/* Markdown Download */}
           <button
             type="button"

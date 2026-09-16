@@ -9,6 +9,15 @@ import {
 } from '../../types/admin';
 import { AdminDashboardOverview } from './AdminDashboardOverview';
 import { AdminUserManagement } from './AdminUserManagement';
+import { AdminDocumentManagement } from './AdminDocumentManagement';
+import { AdminImageAssetManagement } from './AdminImageAssetManagement';
+import { AdminKnowledgeHub } from './AdminKnowledgeHub';
+import { AdminMarketManagement } from './AdminMarketManagement';
+import { AdminServiceManagement } from './AdminServiceManagement';
+import { GeneratedDocument } from '../../types/document';
+import { PresentationDocument } from '../../types/presentation';
+import { ExcelDocument } from '../../types/excel';
+import { BusinessFormDocument } from '../../types/formStudio';
 import {
   ShieldAlert,
   LayoutDashboard,
@@ -19,9 +28,14 @@ import {
   Server,
   Cpu,
   RefreshCw,
+  FolderOpen,
+  Image as ImageIcon,
+  BookOpen,
+  ShoppingBag,
+  Megaphone,
 } from 'lucide-react';
 
-export type AdminTab = 'dashboard' | 'users';
+export type AdminTab = 'dashboard' | 'users' | 'documents' | 'market' | 'images' | 'knowledge' | 'service';
 
 interface AdminConsoleViewProps {
   stats: AdminOverviewStats;
@@ -30,8 +44,20 @@ interface AdminConsoleViewProps {
   industryTops: IndustryTopItem[];
   recentLogs: AdminActivityLog[];
   userList: AdminUserData[];
+  documents: GeneratedDocument[];
+  presentations: PresentationDocument[];
+  excels: ExcelDocument[];
+  forms: BusinessFormDocument[];
   onBackToApp: () => void;
   onRefreshData?: () => void;
+  onEditDocument: (doc: GeneratedDocument) => void;
+  onDeleteDocument: (id: string) => Promise<void>;
+  onEditPresentation: (pres: PresentationDocument) => void;
+  onDeletePresentation: (id: string) => Promise<void>;
+  onEditExcel: (excel: ExcelDocument) => void;
+  onDeleteExcel: (id: string) => Promise<void>;
+  onEditForm: (form: BusinessFormDocument) => void;
+  onDeleteForm: (userId: string, id: string) => Promise<void>;
 }
 
 export const AdminConsoleView: React.FC<AdminConsoleViewProps> = ({
@@ -41,8 +67,20 @@ export const AdminConsoleView: React.FC<AdminConsoleViewProps> = ({
   industryTops,
   recentLogs,
   userList,
+  documents,
+  presentations,
+  excels,
+  forms,
   onBackToApp,
   onRefreshData,
+  onEditDocument,
+  onDeleteDocument,
+  onEditPresentation,
+  onDeletePresentation,
+  onEditExcel,
+  onDeleteExcel,
+  onEditForm,
+  onDeleteForm,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -140,6 +178,72 @@ export const AdminConsoleView: React.FC<AdminConsoleViewProps> = ({
               {userList.length}
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('documents')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'documents'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <FolderOpen className="w-4 h-4 text-indigo-400" />
+            <span>통합 문서함 관리</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 text-[10px]">
+              {documents.length + presentations.length + excels.length + forms.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('market')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'market'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <ShoppingBag className="w-4 h-4 text-amber-400" />
+            <span>마켓플레이스 관리</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-bold">
+              HOT
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('images')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'images'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <ImageIcon className="w-4 h-4 text-indigo-400" />
+            <span>이미지 에셋 관리</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('knowledge')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'knowledge'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-indigo-400" />
+            <span>지식허브 관리</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('service')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'service'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Megaphone className="w-4 h-4 text-emerald-400" />
+            <span>서비스 도움말 관리</span>
+          </button>
         </div>
       </div>
 
@@ -153,8 +257,31 @@ export const AdminConsoleView: React.FC<AdminConsoleViewProps> = ({
             industryTops={industryTops}
             recentLogs={recentLogs}
           />
-        ) : (
+        ) : activeTab === 'users' ? (
           <AdminUserManagement users={userList} />
+        ) : activeTab === 'documents' ? (
+          <AdminDocumentManagement
+            documents={documents}
+            presentations={presentations}
+            excels={excels}
+            forms={forms}
+            onEditDocument={onEditDocument}
+            onDeleteDocument={onDeleteDocument}
+            onEditPresentation={onEditPresentation}
+            onDeletePresentation={onDeletePresentation}
+            onEditExcel={onEditExcel}
+            onDeleteExcel={onDeleteExcel}
+            onEditForm={onEditForm}
+            onDeleteForm={onDeleteForm}
+          />
+        ) : activeTab === 'market' ? (
+          <AdminMarketManagement />
+        ) : activeTab === 'images' ? (
+          <AdminImageAssetManagement />
+        ) : activeTab === 'knowledge' ? (
+          <AdminKnowledgeHub />
+        ) : (
+          <AdminServiceManagement />
         )}
       </main>
 

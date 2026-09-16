@@ -9,9 +9,12 @@ import {
   ChevronRight,
   FolderArchive,
   AlertTriangle,
+  Upload,
+  Download,
 } from 'lucide-react';
 import { GeneratedDocument, IndustryField } from '../types/document';
 import { INDUSTRY_FIELDS } from '../data/presets';
+import { exportDocToDocx } from '../services/docWordExportService';
 
 interface SavedDocumentsModalProps {
   documents: GeneratedDocument[];
@@ -20,6 +23,7 @@ interface SavedDocumentsModalProps {
   onSelectDocument: (doc: GeneratedDocument) => void;
   onDeleteDocument: (docId: string) => void;
   onToggleStar: (docId: string) => void;
+  onPublishToMarket?: (doc: GeneratedDocument) => void;
 }
 
 export const SavedDocumentsModal: React.FC<SavedDocumentsModalProps> = ({
@@ -29,6 +33,7 @@ export const SavedDocumentsModal: React.FC<SavedDocumentsModalProps> = ({
   onSelectDocument,
   onDeleteDocument,
   onToggleStar,
+  onPublishToMarket,
 }) => {
   const [itemToDelete, setItemToDelete] = useState<GeneratedDocument | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -202,6 +207,32 @@ export const SavedDocumentsModal: React.FC<SavedDocumentsModalProps> = ({
 
                   {/* Right Actions */}
                   <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await exportDocToDocx(doc);
+                        } catch (err) {
+                          console.error(err);
+                          alert('Word 문서 다운로드 중 오류가 발생했습니다.');
+                        }
+                      }}
+                      className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
+                      title="Word (.docx) 다운로드"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                    {onPublishToMarket && (
+                      <button
+                        type="button"
+                        onClick={() => onPublishToMarket(doc)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 cursor-pointer transition-colors"
+                        title="오픈 마켓플레이스에 발행"
+                      >
+                        <Upload className="w-3 h-3" />
+                        <span>마켓 발행</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onToggleStar(doc.id)}

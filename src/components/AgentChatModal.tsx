@@ -15,7 +15,7 @@ import {
   Layers,
   HelpCircle,
 } from 'lucide-react';
-import Markdown from 'react-markdown';
+import { MarkdownRenderer } from './MarkdownRenderer';
 import { requestAgentConsultation, AgentChatMessage } from '../services/aiService';
 import { DocumentInputForm, IndustryField, DocumentCategoryType } from '../types/document';
 
@@ -59,6 +59,16 @@ const STARTER_PROMPTS = [
     icon: BookOpen,
     title: '시장조사 & 경쟁사 분석',
     prompt: '글로벌 및 국내 시장 조사 보고서 작성 시 신뢰도 높은 데이터 인용법과 3C, SWOT, 5-Forces 프레임워크를 활용한 경쟁사 분석 작성 가이드를 알려줘.',
+  },
+  {
+    icon: Sparkles,
+    title: '신제품 GTM 마케팅 기획',
+    prompt: '신제품 시장 진입(GTM)을 위한 마케팅 캠페인 기획서 예시 목차와 초기 타겟 고객 확보(User Acquisition)를 위한 디지털 광고 매체 믹스 최적화 방안을 가이드해줘.',
+  },
+  {
+    icon: HelpCircle,
+    title: '기획 부서 연간 성과 평가 보고',
+    prompt: '기획/경영지원 부서의 연간 정량 성과(비용 절감율, 효율성 개선 성과) 및 기여도를 이사회에 직관적으로 수치화하여 보고하기 위한 연간 실적 보고서 작성 템플릿을 알려줘.',
   },
   {
     icon: Sparkles,
@@ -106,6 +116,7 @@ export const AgentChatModal: React.FC<AgentChatModalProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showConfirmReset, setShowConfirmReset] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -212,12 +223,11 @@ export const AgentChatModal: React.FC<AgentChatModalProps> = ({
   };
 
   const handleResetChat = () => {
-    if (window.confirm('에이전트와의 모든 대화 내역을 초기화하시겠습니까?')) {
-      setMessages([INITIAL_GREETING]);
-      try {
-        localStorage.removeItem(STORAGE_KEY);
-      } catch {}
-    }
+    setMessages([INITIAL_GREETING]);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    setShowConfirmReset(false);
   };
 
   const handleCopyText = (id: string, text: string) => {
@@ -261,15 +271,35 @@ export const AgentChatModal: React.FC<AgentChatModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              id="agent-btn-reset"
-              onClick={handleResetChat}
-              title="대화 초기화"
-              className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span className="hidden sm:inline">대화 초기화</span>
-            </button>
+            {showConfirmReset ? (
+              <div className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/30 px-2 py-1 rounded-lg text-xs animate-in fade-in zoom-in-95 duration-150">
+                <span className="text-[10px] sm:text-xs font-bold text-rose-200">정말 대화를 비울까요?</span>
+                <button
+                  id="agent-btn-reset-confirm-yes"
+                  onClick={handleResetChat}
+                  className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[10px] sm:text-xs font-black cursor-pointer transition-colors shadow-2xs"
+                >
+                  예
+                </button>
+                <button
+                  id="agent-btn-reset-confirm-no"
+                  onClick={() => setShowConfirmReset(false)}
+                  className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md text-[10px] sm:text-xs font-bold cursor-pointer transition-colors"
+                >
+                  취소
+                </button>
+              </div>
+            ) : (
+              <button
+                id="agent-btn-reset"
+                onClick={() => setShowConfirmReset(true)}
+                title="대화 초기화"
+                className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span className="hidden sm:inline">대화 초기화</span>
+              </button>
+            )}
             <button
               id="agent-btn-close"
               onClick={onClose}
@@ -381,8 +411,8 @@ export const AgentChatModal: React.FC<AgentChatModalProps> = ({
                     {msg.content}
                   </p>
                 ) : (
-                  <div className="prose prose-sm max-w-none text-slate-800 leading-relaxed space-y-2 prose-headings:font-bold prose-headings:text-slate-900 prose-h3:text-base prose-h4:text-sm prose-p:text-sm prose-ul:my-2 prose-li:text-sm prose-table:text-xs prose-table:border-collapse prose-th:bg-slate-100 prose-th:p-2 prose-td:p-2 prose-td:border prose-td:border-slate-200">
-                    <Markdown>{msg.content}</Markdown>
+                  <div className="w-full text-slate-800 leading-relaxed">
+                    <MarkdownRenderer content={msg.content} />
                   </div>
                 )}
 

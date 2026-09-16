@@ -38,6 +38,23 @@ export function extractJsonFromResponse(rawText: string): any {
   return null;
 }
 
+/**
+ * Formats Gemini API errors, specifically addressing quota limits and resource exhaustion
+ */
+function formatGeminiError(err: any, defaultMsg: string): Error {
+  const msg = err?.message || String(err);
+  if (
+    msg.includes('resource_exhausted') ||
+    msg.includes('quota') ||
+    msg.includes('LimitExceeded') ||
+    msg.includes('429') ||
+    msg.includes('exhausted')
+  ) {
+    return new Error('구글 AI 스튜디오의 Gemini API 사용 한도(Quota) 또는 요금제 트래픽 제약이 초과되었습니다. 사용 중인 API 키의 결제 설정을 확인하시거나 잠시 후 다시 실행해 보십시오. (Error: API Quota Exceeded)');
+  }
+  return new Error(defaultMsg + ` (상용 서버 에러: ${msg})`);
+}
+
 export async function generateWithFallback(
   apiKey: string,
   params: {
@@ -120,7 +137,7 @@ export async function generateWithFallback(
     }
   }
 
-  throw lastError || new Error('현재 AI 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.');
+  throw formatGeminiError(lastError, '현재 AI 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.');
 }
 
 export interface ChatMessage {
@@ -152,12 +169,15 @@ export async function chatWithDocumentAgent(
 
 [답변 스타일]
 - 정중하고 격식 있는 비즈니스 컨설턴트 톤 (해요체 또는 하십시오체의 친절하면서도 전문적인 어조).
-- Markdown 서식(소제목 ###, 불릿 포인트, 굵은 글씨, 표, 코드블록)을 적극 활용하여 가독성을 극대화하십시오.
+- Markdown 서식(소제목 ###, 불릿 포인트, 굵은 글씨, 표, 코드블록, 체크리스트)을 적극 활용하여 가독성을 극대화하십시오.
+- [마크다운 표(Table) 필수 서식]: 표 작성 시 각 행마다 줄바꿈(\\n)을 반드시 적용하여 | 헤더1 | 헤더2 |\\n|---|---|\\n| 값1 | 값2 | 형태로 작성하십시오. 한 줄에 표 행들을 연달아 붙여쓰지 마십시오.
 - 실무 예시와 구체적인 수치/프레임워크를 포함하여 바로 적용할 수 있도록 실용적으로 답변하십시오.`;
 
   // Build conversational transcript
   const transcript = messages.map(m => `${m.role === 'user' ? '사용자' : '문서 전략 에이전트'}: ${m.content}`).join('\n\n');
   const fullPrompt = `${currentContext ? `[현재 앱/문서 컨텍스트]\n${currentContext}\n\n` : ''}[대화 내역]\n${transcript}\n\n문서 전략 에이전트로서 전문적이고 친절하게 실무 조언을 작성하십시오:`;
+
+  let lastError: any = null;
 
   for (const model of CANDIDATE_MODELS) {
     try {
@@ -174,11 +194,12 @@ export async function chatWithDocumentAgent(
         return response.text.trim();
       }
     } catch (err: any) {
+      lastError = err;
       console.warn(`[Agent Chat] Model ${model} failed:`, err?.message || err);
     }
   }
 
-  throw new Error('에이전트 응답 생성 중 일시적인 오류가 발생했습니다. 잠시 후 다시 질문해 주세요.');
+  throw formatGeminiError(lastError, '에이전트 응답 생성 중 일시적인 오류가 발생했습니다. 잠시 후 다시 질문해 주세요.');
 }
 
 export async function generatePresentationDeck(

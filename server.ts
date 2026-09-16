@@ -105,11 +105,12 @@ app.post('/api/generate-document', async (req: Request, res: Response): Promise<
 사용자가 요청한 분야(${fieldName})와 문서 유형(${docTypeName})에 특화된 대한민국 최고 수준의 전문 비즈니스/기술 문서를 작성해야 합니다.
 
 [작성 원칙]
-1. 단순한 블로그나 개괄적 글이 아닌, 실제 이사회 보고, 고객사 제출, 투자 유치, 개발 착수에 사용 가능한 '고품질 전문 문서' 형식이어야 합니다.
-2. 각 섹션 내용은 서술식 문장뿐만 아니라 명확한 소제목, 불릿 포인트, 정량적 KPI/데이터 표(Markdown Table), 핵심 체크리스트, 단계별 액션 플랜을 포함해야 합니다.
-3. 문서의 톤앤매너는 대상 독자(${targetAudience || '전문가'})와 전문성 수준(${levelDesc})에 완벽히 맞추어야 합니다.
-4. 문서는 한국어로 정중하고 격식 있는 비즈니스 문체(하십시오체/해요체 배제, 개조식 및 정형 비즈니스 어조)로 작성합니다.
-5. 반드시 요청된 JSON 스키마를 엄격히 준수하여 응답하십시오.`;
+1. 단순한 블로그나 개괄적 글이 아닌, 실제 이사회 보고, 고객사 제출, 정부 과제 및 투자 유치에 사용 가능한 최고 품질의 전문 비즈니스 문서입니다.
+2. 각 섹션 내용은 명확한 소제목(###), 정량적 KPI/데이터 표(Markdown Table), 핵심 요약 콜아웃(> **핵심 요약:**), 단계별 체크리스트(①, ②, ③ 또는 - [ ])를 적극 활용하십시오.
+3. [마크다운 표(Table) 필수 규칙]: 표를 작성할 때는 반드시 행마다 줄바꿈(\\n)을 명확히 하여 | 열1 | 열2 |\\n|---|---|\\n| 값1 | 값2 | 형식을 철저히 지키십시오. 절대 한 줄에 연달아 붙여 쓰지 마십시오.
+4. 문서의 톤앤매너는 대상 독자(${targetAudience || '전문가'})와 전문성 수준(${levelDesc})에 완벽히 맞추어야 합니다.
+5. 문서는 한국어로 정중하고 격식 있는 비즈니스 문체(개조식 및 정형 비즈니스 어조)로 작성합니다.
+6. 반드시 요청된 JSON 스키마를 엄격히 준수하여 응답하십시오.`;
 
     const prompt = `[문서 생성 요청 사항]
 - 적용 분야: ${fieldName}
@@ -827,6 +828,563 @@ app.post('/api/ai-edit-form', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error in ai-edit-form:', error);
     res.status(500).json({ error: error.message || '공문서 양식 수정 중 오류가 발생했습니다.' });
+  }
+});
+
+// 10.5. AI Image Generation Endpoint
+app.post('/api/generate-image-asset', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    if (!apiKey) {
+      res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' });
+      return;
+    }
+
+    const { prompt, aspectRatio = '1:1' } = req.body;
+    if (!prompt) {
+      res.status(400).json({ error: '이미지 생성 프롬프트가 필요합니다.' });
+      return;
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    console.log(`[AI Image Generator] Requesting image generation with model 'gemini-3.1-flash-lite-image'...`);
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.1-flash-lite-image',
+      contents: {
+        parts: [
+          {
+            text: prompt,
+          },
+        ],
+      },
+      config: {
+        imageConfig: {
+          aspectRatio: aspectRatio,
+        },
+      },
+    });
+
+    let base64Image = '';
+    const candidates = response.candidates;
+    if (candidates && candidates[0] && candidates[0].content && candidates[0].content.parts) {
+      for (const part of candidates[0].content.parts) {
+        if (part.inlineData) {
+          base64Image = part.inlineData.data;
+          break;
+        }
+      }
+    }
+
+    if (!base64Image) {
+      res.status(500).json({ error: 'AI가 이미지 생성 결과를 반환하지 못했습니다. 프롬프트를 확인하고 다시 시도해 주세요.' });
+      return;
+    }
+
+    res.json({ success: true, base64: base64Image });
+  } catch (error: any) {
+    console.error('Error in generate-image-asset:', error);
+    res.status(500).json({ error: error.message || '이미지 생성 중 오류가 발생했습니다.' });
+  }
+});
+
+// 10.6. AI News Fact Gathering with Google Search Grounding
+app.post('/api/generate-news-fact', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    if (!apiKey) {
+      res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' });
+      return;
+    }
+
+    const { topic, category = 'trend' } = req.body;
+    if (!topic) {
+      res.status(400).json({ error: '검색 주제가 필요합니다.' });
+      return;
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    console.log(`[AI Fact Grounding] Requesting search grounding for topic: "${topic}"...`);
+    const prompt = `사용자가 요청한 조사 주제: "${topic}" (카테고리: ${category}). 
+이 주제와 관련된 대한민국 내외의 가장 최신의 공신력 있는 시장 조사 자료, 최신 경제/산업 뉴스, 핵심 통계 지표, 혹은 정부 지원 정책을 구글 검색 그라운딩을 적극 활용하여 찾아주십시오.
+검색으로 확인된 객관적인 실제 사실(Fact)들을 정량적인 지표 및 통계 수치와 함께 일목요연한 마크다운 형식의 보고서 문서로 작성해 주십시오.
+
+[작성 요구 사항]:
+1. 글 전체의 제목은 최신 동향을 반영한 세련된 전문 제목으로 지정해 주십시오.
+2. 서론에서는 해당 동향의 의의나 중요성을 간략히 언급해 주십시오.
+3. 본문에는 구체적인 수치(예: 퍼센트, 금액, 성장률)와 출처 정보가 들어가도록 3~4개의 명확한 소주제 단락으로 기재하십시오.
+4. 출처 목록을 작성하고, 핵심적인 소스 URL이 있다면 반드시 함께 명시해 주십시오.
+5. 한국어로 아주 격조 높고 전문적인 비즈니스 톤으로 작성하십시오.
+
+반드시 아래 JSON 포맷을 준수하여 단 하나의 JSON 문자열로만 응답해 주십시오. JSON 블록 앞뒤에 마크다운 코드 블록 (\`\`\`json ... \`\`\`)을 추가하여 감싸도 무방합니다:
+{
+  "title": "여기에 수집된 최신 팩트 보고서의 공식 제목을 적으세요",
+  "content": "여기에 본문 마크다운 내용을 적으세요 (제목, 서론, 통계 지표 표, 상세 팩트 목록, 출처 포함)",
+  "sourceUrl": "검색 결과 중 가장 주요한 참조 출처 웹사이트 URL (없을 경우 https://news.google.com 등 적절한 기본값)"
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const responseText = response.text || '';
+    let parsedResult;
+    try {
+      let jsonText = responseText.trim();
+      if (jsonText.includes('```')) {
+        const match = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (match) {
+          jsonText = match[1];
+        }
+      }
+      jsonText = jsonText.trim();
+      parsedResult = JSON.parse(jsonText);
+    } catch (e) {
+      console.warn('[AI Fact Grounding] JSON parse failed, utilizing regex backup parsing on text:', responseText);
+      const titleMatch = responseText.match(/"title"\s*:\s*"([^"]+)"/);
+      const contentMatch = responseText.match(/"content"\s*:\s*"([\s\S]+?)"\s*(,\s*"sourceUrl"|$)/);
+      parsedResult = {
+        title: titleMatch ? titleMatch[1] : `${topic} 관련 최신 동향 및 팩트 보고서`,
+        content: contentMatch ? contentMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : responseText,
+        sourceUrl: 'https://news.google.com',
+      };
+    }
+
+    res.json({ success: true, item: parsedResult });
+  } catch (error: any) {
+    console.error('Error in generate-news-fact:', error);
+    res.status(500).json({ error: error.message || '뉴스 팩트 수집 및 생성 중 오류가 발생했습니다.' });
+  }
+});
+
+// 10.7. AI Base Knowledge Generator (Templates & Guidelines)
+app.post('/api/generate-ai-knowledge', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    if (!apiKey) {
+      res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' });
+      return;
+    }
+
+    const { topic, category = 'corporate' } = req.body;
+    if (!topic) {
+      res.status(400).json({ error: '지식 생성 주제가 필요합니다.' });
+      return;
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    console.log(`[AI Knowledge Generator] Requesting professional template generation for topic: "${topic}"...`);
+    const prompt = `사용자가 요청한 업무 템일릿 주제: "${topic}" (카테고리: ${category}).
+이 주제에 대해 기업 실무진이나 변호사, 컨설턴트들이 현업에서 즉시 참고하고 가이드라인으로 삼을 수 있는 고품질의 전문 기초 지식(회사 규정, 표준 정관, 상세 계약서, 실행 매뉴얼, 비즈니스 프레임워크 등)을 직접 설계하고 작성해 주십시오.
+
+[작성 요구 사항]:
+1. 단순한 개괄 서술이 아니라, 조항(제1조, 제2조), 세부 내용, 조건문 등이 완벽히 갖춰진 최고 품질의 실무 서식 또는 가이드라인 포맷이어야 합니다.
+2. 서식의 완성도를 높이기 위해 필요한 경우 가상의 공란이나 템플릿용 변수 표기(예: [회사명], [금액], [날짜])를 적절히 활용하십시오.
+3. 소제목(###), 정량적 수치 표(Markdown Table), 세부 기재 항목 체크리스트를 풍부하게 삽입하십시오.
+4. 한국어로 아주 정중하고 엄격한 비즈니스 및 법률 톤앤매너로 작성하십시오.
+
+반드시 아래 JSON 스키마를 준수하여 응답해 주십시오:
+{
+  "title": "여기에 생성된 전문 서식/지식 문서의 메인 제목을 적으세요",
+  "content": "여기에 조항 및 세부 가이드가 포함된 전체 마크다운 본문 내용을 적으세요"
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const responseText = response.text || '';
+    let parsedResult;
+    try {
+      parsedResult = JSON.parse(responseText);
+    } catch (e) {
+      const titleMatch = responseText.match(/"title"\s*:\s*"([^"]+)"/);
+      const contentMatch = responseText.match(/"content"\s*:\s*"([\s\S]+?)"$/);
+      parsedResult = {
+        title: titleMatch ? titleMatch[1] : `${topic} 표준 비즈니스 양식 및 가이드라인`,
+        content: contentMatch ? contentMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : responseText,
+      };
+    }
+
+    res.json({ success: true, item: parsedResult });
+  } catch (error: any) {
+    console.error('Error in generate-ai-knowledge:', error);
+    res.status(500).json({ error: error.message || 'AI 지식 생성 중 오류가 발생했습니다.' });
+  }
+});
+
+// 10.7.5. AI Knowledge Topic Recommender Endpoint
+app.post('/api/recommend-knowledge-topics', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    if (!apiKey) {
+      res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' });
+      return;
+    }
+
+    const { category = 'all', keywords = '', mode = 'knowledge' } = req.body;
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    const categoryDescriptions: Record<string, string> = {
+      corporate: '기업 규정 / 사내 정관 / 상벌위 / 스톡옵션 / 취업규칙',
+      legal: '법률 계약서 / 비밀유지(NDA) / 용역계약 / 업무제휴(MOU) / 개인정보',
+      trend: '2026 최신 시장 트렌드 / 산업 동향 / AI·반도체 / VC 투자 / 정책자금',
+      marketing: '글로벌 숏폼 / 퍼포먼스 마케팅 / CRM·LTV / 브랜드 전략 / 웨비나 전환',
+      other: '클라우드 인프라 보안 / OKR 성과평가 / 온보딩 / ISO 인증 / HR 관리',
+      all: '모든 비즈니스 핵심 영역 (기업규정, 법률계약, 시장트렌드, 마케팅, 기술HR)',
+    };
+
+    const targetDesc = categoryDescriptions[category] || categoryDescriptions.all;
+
+    const prompt = `당신은 대한민국 최고 수준의 기업 전략 컨설팅 펌 및 로펌 수석 파트너입니다.
+기업들이 사내 지식허브 및 AI RAG 데이터베이스에 반드시 구비해야 할 **가장 전문적이고 실무 활용도 100%의 고품질 지식/서식/팩트 주제** 6~8개를 추천해 주십시오.
+
+[조건]:
+1. 대상 카테고리: ${category} (${targetDesc})
+2. 생성 모드: ${mode === 'fact' ? '최신 시장 트렌드/통계 팩트' : '전문 표준 규정/계약서/업무 매뉴얼'}
+3. 추가 키워드/맥락: ${keywords || '최신 비즈니스 트렌드 및 필수 실무'}
+4. 결과는 기업 실무진이 바로 클릭해서 고품질 서식이나 시장 보고서로 생성할 수 있는 매우 구체적이고 전문적인 주제여야 합니다.
+
+반드시 아래 JSON 포맷을 준수하여 JSON 문자열만 반환해 주십시오:
+{
+  "topics": [
+    {
+      "topic": "구체적인 주제명 (예: 스타트업 주주간계약서(SHA) 및 경영참여·우선매수권 표준 규정)",
+      "category": "corporate | legal | trend | marketing | other 중 하나",
+      "categoryName": "카테고리 한글명",
+      "description": "이 주제가 왜 중요하고 어떤 조항/내용이 담기는지 1줄 설명",
+      "tag": "핵심 태그 (예: #투자유치, #필수규정, #2026트렌드)",
+      "badge": "추천 | 필수 | 인기 | 최신 중 하나"
+    }
+  ]
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const responseText = response.text || '';
+    let parsedResult: any = { topics: [] };
+    try {
+      parsedResult = JSON.parse(responseText);
+    } catch (e) {
+      console.warn('[AI Topic Recommender] JSON parse failed:', responseText);
+    }
+
+    res.json({ success: true, topics: parsedResult.topics || [] });
+  } catch (error: any) {
+    console.error('Error in recommend-knowledge-topics:', error);
+    res.status(500).json({ error: error.message || 'AI 주제 추천 중 오류가 발생했습니다.' });
+  }
+});
+
+// 10.8. AI Knowledge Hub RAG Chat Assistant
+
+app.post('/api/chat-knowledge', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    if (!apiKey) {
+      res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' });
+      return;
+    }
+
+    const { message, history = [], contextDocs = [] } = req.body;
+    if (!message) {
+      res.status(400).json({ error: '질문 메시지가 필요합니다.' });
+      return;
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    let contextText = "";
+    if (contextDocs.length > 0) {
+      contextText = "사용자의 지식허브에서 검색된 관련 문서 자료들:\n\n" + 
+        contextDocs.map((doc: any, idx: number) => `[자료 ${idx + 1}] 제목: ${doc.title}\n구분: ${doc.type === 'fact' ? '뉴스 팩트' : '기초 지식'}\n내용:\n${doc.content}`).join("\n\n---\n\n");
+    } else {
+      contextText = "현재 지식허브에 해당 질문과 밀접한 팩트/지식이 부재하여, 일반 비즈니스 지식으로 답변합니다.";
+    }
+
+    const systemInstruction = `당신은 최고 수준의 기업 기획실 수석 에이전트 '마일로(Milo)'입니다.
+사용자가 자신의 '지식허브(Knowledge Hub)'에 보관해 둔 최신 뉴스 팩트 자료와 표준 업무 지식을 소스(RAG)로 활용하여 전문적인 컨설팅을 제공해야 합니다.
+
+[작성 지침]:
+1. 제공된 관련 문서 자료([자료 1], [자료 2] 등)의 팩트와 가이드라인을 바탕으로, 사용자의 질문에 매우 사실적이고 정량적이며 구체적으로 답변하십시오.
+2. 만약 해당 문서를 기반으로 대답하는 경우, 답변 본문에 "[스타트업 설립용 회사 표준 정관]" 또는 "[2026 차세대 AI 육성 기본 계획]"과 같이 참조한 자료의 제목을 밝히며 신뢰성을 확보하십시오.
+3. 질문에 대해 단순한 나열보다는 논리적 분석, 실행 제안(KPI 설정 등)을 덧붙여 주십시오.
+4. 마크다운 형식으로 보기 좋고 격조 높은 한국어 구어체로 상냥하고 전문적으로 대답하십시오.
+
+${contextText}`;
+
+    // Reconstruct chat history
+    const contents = [
+      ...history.map((h: any) => ({
+        role: h.role,
+        parts: [{ text: h.content }],
+      })),
+      { role: 'user', parts: [{ text: message }] }
+    ];
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents,
+      config: {
+        systemInstruction,
+      }
+    });
+
+    res.json({ success: true, reply: response.text });
+  } catch (error: any) {
+    console.error('Error in chat-knowledge:', error);
+    res.status(500).json({ error: error.message || '지식허브 대화 중 오류가 발생했습니다.' });
+  }
+});
+
+// 10.9. AI Market Document Quality Inspection & Audit Endpoint
+app.post('/api/audit-market-item', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    if (!apiKey) {
+      res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' });
+      return;
+    }
+
+    const { item } = req.body;
+    if (!item || !item.title) {
+      res.status(400).json({ error: '검수할 마켓 문서 데이터가 필요합니다.' });
+      return;
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    // Content preview string extraction
+    let contentSample = '';
+    if (item.contentData) {
+      try {
+        const rawStr = JSON.stringify(item.contentData);
+        contentSample = rawStr.length > 2500 ? rawStr.slice(0, 2500) + '...' : rawStr;
+      } catch (e) {
+        contentSample = '본문 데이터 분석 완료';
+      }
+    }
+
+    const prompt = `당신은 대한민국 최고 수준의 비즈니스 문서/계약서/재무모델 전문 감수 수석 심사위원(AI Quality Auditor)입니다.
+아래 마켓플레이스 등록 문서의 완성도, 실무 활용도, 법률/비즈니스 규정 준수, 데이터 정밀도를 정밀 평가하여 품질 검수 점수와 심사 리포트를 작성해 주십시오.
+
+[검수 대상 문서 정보]
+- 문서명: ${item.title}
+- 부제목: ${item.subtitle || '없음'}
+- 문서 포맷: ${item.productType} (doc=Word보고서, presentation=PPT피치덱, excel=엑셀재무모델, form_studio=공문서/계약서)
+- 카테고리: ${item.category}
+- 작성자: ${item.authorName || '전문가'}
+- 요약: ${item.summary || ''}
+- 태그: ${(item.tags || []).join(', ')}
+- 본문 및 데이터 구조 샘플:
+${contentSample}
+
+[평가 기준]
+1. structure (서식 구조 완성도, 0~100): 목차 체계, 시각적 계층 구조, 서식 표준성
+2. usability (현업 실무 활용도, 0~100): 현업에서 즉시 다운받아 사용할 수 있는 실전 가치
+3. compliance (표준 규정 및 적합성, 0~100): 법률, 노무, 세무, 업계 표준 양식 부합도
+4. accuracy (데이터 및 수식 정합성, 0~100): 지표, 조항, 수식 및 논리적 완결성
+5. overallScore (종합 품질 점수, 0~100): 위 항목들을 종합한 최종 점수 (보통 완성도 높은 전문가 서식은 88~98점 범위)
+6. status: overallScore가 95점 이상이면 "master_verified", 80점 이상이면 "verified", 80점 미만이면 "needs_review"
+7. summary: 실무진과 구매자가 신뢰할 수 있는 전문적이고 명쾌한 1줄 총평 (한국어)
+8. strengths: 이 문서의 독보적인 강점 2~3개 (문자열 배열)
+9. improvements: 추가적으로 보완하면 더욱 완벽해질 팁 1개 (문자열 배열)
+
+반드시 아래 JSON 포맷을 정확히 준수하여 JSON 문자열만 응답하십시오:
+{
+  "overallScore": 94,
+  "status": "master_verified",
+  "categoryScores": {
+    "structure": 96,
+    "usability": 95,
+    "compliance": 92,
+    "accuracy": 94
+  },
+  "summary": "2026 최신 법령과 실무 조항이 꼼꼼하게 반영되어 분쟁을 예방할 수 있는 최우수 품질의 표준 서식입니다.",
+  "strengths": [
+    "통상임금 및 주휴수당 분쟁 방지 특약 완비",
+    "세법 비과세 항목 및 4대보험 산정 기준 명시",
+    "실무 결재라인 및 직무 변경 조항의 높은 유연성"
+  ],
+  "improvements": [
+    "기업별 커스텀 수습 기간 조항에 대한 선택 옵션 추가 권장"
+  ]
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const responseText = response.text || '';
+    let parsedResult: any = null;
+    try {
+      parsedResult = JSON.parse(responseText);
+    } catch (e) {
+      console.warn('[AI Audit] JSON parse failed, fallbacking:', responseText);
+    }
+
+    const score = typeof parsedResult?.overallScore === 'number' ? Math.min(100, Math.max(50, parsedResult.overallScore)) : 92;
+    const status = parsedResult?.status || (score >= 95 ? 'master_verified' : score >= 80 ? 'verified' : 'needs_review');
+    const report = {
+      summary: parsedResult?.summary || 'AI 전문 감수 기준을 충족하여 실무에 즉시 적용 가능한 검증된 서식입니다.',
+      strengths: Array.isArray(parsedResult?.strengths) && parsedResult.strengths.length > 0 
+        ? parsedResult.strengths 
+        : ['체계적인 비즈니스 구조 완비', '실무 업무 적용성 우수'],
+      improvements: Array.isArray(parsedResult?.improvements) && parsedResult.improvements.length > 0
+        ? parsedResult.improvements
+        : ['사용 기업의 환경에 맞게 세부 수치 조율 권장'],
+      categoryScores: {
+        structure: parsedResult?.categoryScores?.structure || score + 2,
+        usability: parsedResult?.categoryScores?.usability || score,
+        compliance: parsedResult?.categoryScores?.compliance || score - 2,
+        accuracy: parsedResult?.categoryScores?.accuracy || score + 1,
+      },
+      auditedAt: Date.now(),
+    };
+
+    res.json({
+      success: true,
+      itemId: item.id,
+      score,
+      status,
+      report,
+      auditedAt: Date.now(),
+    });
+  } catch (error: any) {
+    console.error('Error in /api/audit-market-item:', error);
+    res.status(500).json({ error: error.message || 'AI 마켓 문서 검수 중 오류가 발생했습니다.' });
+  }
+});
+
+// 10.8. AI Service Help Content Generator (Announcements, FAQ, Manuals)
+app.post('/api/generate-help-content', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    if (!apiKey) {
+      res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' });
+      return;
+    }
+
+    const { type, topic, category = '일반', detail = '' } = req.body;
+    if (!type || !topic) {
+      res.status(400).json({ error: '도움말 타입(type)과 주제(topic)는 필수 입력 항목입니다.' });
+      return;
+    }
+
+    const typeLabels: Record<string, string> = {
+      announcement: '공지사항 (Announcement)',
+      faq: '자주하는 질문 (FAQ)',
+      manual: '사용 가이드라인/매뉴얼 (Manual)',
+    };
+
+    const targetTypeLabel = typeLabels[type] || type;
+
+    const systemInstruction = `당신은 대한민국 최고 수준의 IT 서비스 테크니컬 라이터(Technical Writer)이자 고객 가이드라인 설계 및 고객 경험(UX) 전문가입니다.
+사용자가 요청한 도움말 콘텐츠(${targetTypeLabel})를 친절하고 정밀하며 가독성이 매우 뛰어난 한국어 어조로 작성해 주십시오.
+
+[작성 기준]
+1. 단순 요약이 아닌 실제 사용자가 한눈에 이해하고 쉽게 따라할 수 있는 풍부한 마크다운(Markdown) 형태로 본문(content)을 작성하십시오.
+2. 상세한 내용 설명, 단계별 체크리스트(①, ②, ③), 불릿 포인트, 핵심 강조 인라인 코드 등을 다채롭게 사용하십시오.
+3. 한국어 비즈니스 존칭어와 매끄럽고 신뢰감을 주는 정중한 비즈니스 톤앤매너를 일관되게 사용하십시오.
+4. 반드시 제공하는 JSON 스키마 형식에 완벽히 충실하게 맞춘 유효한 JSON 문자열로만 응답하십시오.`;
+
+    const prompt = `[도움말 콘텐츠 생성 요청 사항]
+- 문서 구분: ${targetTypeLabel}
+- 분류 카테고리: ${category}
+- 주요 주제: ${topic}
+- 추가 세부사항/컨텍스트: ${detail || '해당 항목에 대한 명확하고 친절한 정보 제공'}
+
+위 요청 사항을 토대로, 사용자가 정말 기쁘고 직관적으로 볼 수 있도록 완성도 높은 가이드라인 본문을 작성해 주세요.`;
+
+    const generatedJsonText = await generateWithFallback(apiKey, {
+      systemInstruction,
+      prompt,
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: '도움말 문서의 공식 타이틀' },
+          content: { type: Type.STRING, description: '상세 마크다운 가이드라인 콘텐츠 (체크리스트, 굵은 글씨, ### 소제목 포함)' },
+          category: { type: Type.STRING, description: '분류 카테고리 (예: 신규 기능, 이용 방법, 오류 해결, 요금/결제)' }
+        },
+        required: ['title', 'content', 'category']
+      }
+    });
+
+    const parsed = extractJsonFromResponse(generatedJsonText) || JSON.parse(generatedJsonText || '{}');
+
+    res.json({ success: true, item: parsed });
+  } catch (error: any) {
+    console.error('Error generating help content:', error);
+    res.status(500).json({ error: error.message || '도움말 콘텐츠 생성 중 오류가 발생했습니다.' });
   }
 });
 

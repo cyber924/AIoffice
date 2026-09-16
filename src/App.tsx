@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Navbar, AppMode } from './components/Navbar';
+import { IntroPage } from './components/IntroPage';
 import { DocumentForm } from './components/DocumentForm';
 import { DocumentViewer } from './components/DocumentViewer';
 import { PresentationForm } from './components/PresentationForm';
@@ -47,21 +48,32 @@ import {
   savePresentation,
   fetchAllPresentations,
   deletePresentation,
+  fetchAllDocumentsForAdmin,
+  fetchAllPresentationsForAdmin,
 } from './services/firebaseService';
 import {
   saveExcelDocument,
   fetchAllExcelDocuments,
   deleteExcelDocument,
+  fetchAllExcelDocumentsForAdmin,
 } from './services/excelFirebaseService';
 import {
   saveBusinessForm,
   fetchAllBusinessForms,
   deleteBusinessForm,
+  fetchAllBusinessFormsForAdmin,
+  deleteBusinessFormForAdmin,
 } from './services/formFirebaseService';
 import { FormGeneratorForm } from './components/FormGeneratorForm';
 import { FormViewer } from './components/FormViewer';
 import { SavedFormsModal } from './components/SavedFormsModal';
+import { MarketHub } from './components/market/MarketHub';
+import { MarketPublishModal } from './components/market/MarketPublishModal';
+import { MarketItem, MarketProductType } from './types/market';
 import { AdminConsoleView } from './components/admin/AdminConsoleView';
+import { UserImageGallery } from './components/UserImageGallery';
+import { UserKnowledgeHub } from './components/UserKnowledgeHub';
+import { UserHelpDrawer } from './components/UserHelpDrawer';
 import { calculateAdminDashboardMetrics } from './services/adminAnalyticsService';
 import { isUserAdmin } from './constants/adminConfig';
 import { AlertCircle } from 'lucide-react';
@@ -69,7 +81,7 @@ import confetti from 'canvas-confetti';
 
 function MainApp() {
   const { currentUser } = useAuth();
-  const [appMode, setAppMode] = useState<AppMode>('form_studio');
+  const [appMode, setAppMode] = useState<AppMode>('intro');
   const [currentView, setCurrentView] = useState<'form' | 'viewer'>('form');
 
   // Document states
@@ -88,11 +100,26 @@ function MainApp() {
   const [activeExcel, setActiveExcel] = useState<ExcelDocument | null>(null);
   const [savedExcelDocs, setSavedExcelDocs] = useState<ExcelDocument[]>([]);
   const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
+  const [excelFormData, setExcelFormData] = useState<Partial<ExcelInputForm>>({});
 
   // Business Form states
   const [activeForm, setActiveForm] = useState<BusinessFormDocument | null>(null);
   const [savedForms, setSavedForms] = useState<BusinessFormDocument[]>([]);
   const [isGeneratingForm, setIsGeneratingForm] = useState(false);
+  const [formStudioFormData, setFormStudioFormData] = useState<Partial<BusinessFormInput>>({});
+
+  // Marketplace states
+  const [publishModalData, setPublishModalData] = useState<{
+    id: string;
+    productType: MarketProductType;
+    title: string;
+    subtitle?: string;
+    summary?: string;
+    category?: string;
+    content: any;
+  } | null>(null);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [marketInitialDocId, setMarketInitialDocId] = useState<string | null>(null);
 
   // Modals & Errors
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -103,27 +130,60 @@ function MainApp() {
   const [isSavedExcelOpen, setIsSavedExcelOpen] = useState(false);
   const [isSavedFormsOpen, setIsSavedFormsOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isImageGalleryOpen, setIsImageGalleryOpen] = useState(false);
+  const [isKnowledgeHubOpen, setIsKnowledgeHubOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
-  // Load and refresh documents, presentations, excel, and forms on auth change
+  // Deep Link URL Query Param check (?mode=market&docId=xxx)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const modeParam = params.get('mode');
+      const docIdParam = params.get('docId') || params.get('item');
+      if (modeParam === 'market' || docIdParam) {
+        setAppMode('market');
+        if (docIdParam) {
+          setMarketInitialDocId(docIdParam);
+        }
+      }
+    } catch (e) {
+      console.error('URL parse error:', e);
+    }
+  }, []);
+
+  // Load and refresh documents dynamically based on active appMode (admin vs user) and auth state
   useEffect(() => {
     async function loadData() {
       try {
-        const [docs, pres, excels, forms] = await Promise.all([
-          fetchAllDocuments(),
-          fetchAllPresentations(),
-          fetchAllExcelDocuments(),
-          fetchAllBusinessForms(),
-        ]);
-        setSavedDocuments(docs);
-        setSavedPresentations(pres);
-        setSavedExcelDocs(excels);
-        setSavedForms(forms);
+        if (appMode === 'admin_console') {
+          const [docs, pres, excels, forms] = await Promise.all([
+            fetchAllDocumentsForAdmin(),
+            fetchAllPresentationsForAdmin(),
+            fetchAllExcelDocumentsForAdmin(),
+            fetchAllBusinessFormsForAdmin(),
+          ]);
+          setSavedDocuments(docs);
+          setSavedPresentations(pres);
+          setSavedExcelDocs(excels);
+          setSavedForms(forms);
+        } else {
+          const [docs, pres, excels, forms] = await Promise.all([
+            fetchAllDocuments(),
+            fetchAllPresentations(),
+            fetchAllExcelDocuments(),
+            fetchAllBusinessForms(),
+          ]);
+          setSavedDocuments(docs);
+          setSavedPresentations(pres);
+          setSavedExcelDocs(excels);
+          setSavedForms(forms);
+        }
       } catch (err) {
         console.error('Error loading data:', err);
       }
     }
     loadData();
-  }, [currentUser]);
+  }, [currentUser, appMode]);
 
   // ---------------- Document Actions ----------------
 
@@ -133,6 +193,7 @@ function MainApp() {
     try {
       const generatedDoc = await requestDocumentGeneration(data);
       setActiveDocument(generatedDoc);
+      setAppMode('doc_generator');
       setCurrentView('viewer');
 
       await saveDocument(generatedDoc);
@@ -150,16 +211,49 @@ function MainApp() {
     }
   };
 
-  const handleSelectPreset = (preset: DocumentPreset, autoGenerate: boolean = false) => {
-    if (preset.defaultData) {
-      setDocFormData(preset.defaultData);
-      if (autoGenerate && preset.defaultData.topic) {
-        handleGenerateDoc(preset.defaultData as DocumentInputForm);
-        return;
+  const handleSelectPreset = (preset: any, autoGenerate: boolean = false) => {
+    const product = preset.productType || 'doc';
+    if (product === 'doc') {
+      if (preset.defaultData) {
+        setDocFormData(preset.defaultData);
+        if (autoGenerate && preset.defaultData.topic) {
+          handleGenerateDoc(preset.defaultData as DocumentInputForm);
+          return;
+        }
       }
+      setAppMode('doc_generator');
+      setCurrentView('form');
+    } else if (product === 'presentation') {
+      if (preset.defaultData) {
+        setPresFormData(preset.defaultData);
+        if (autoGenerate && preset.defaultData.topic) {
+          handleGeneratePresentation(preset.defaultData as PresentationInputForm);
+          return;
+        }
+      }
+      setAppMode('presentation_generator');
+      setCurrentView('form');
+    } else if (product === 'excel') {
+      if (preset.defaultData) {
+        setExcelFormData(preset.defaultData);
+        if (autoGenerate && preset.defaultData.title) {
+          handleGenerateExcel(preset.defaultData as ExcelInputForm);
+          return;
+        }
+      }
+      setAppMode('excel_generator');
+      setCurrentView('form');
+    } else if (product === 'form_studio') {
+      if (preset.defaultData) {
+        setFormStudioFormData(preset.defaultData);
+        if (autoGenerate && preset.defaultData.title) {
+          handleGenerateForm(preset.defaultData as BusinessFormInput);
+          return;
+        }
+      }
+      setAppMode('form_studio');
+      setCurrentView('form');
     }
-    setAppMode('doc_generator');
-    setCurrentView('form');
   };
 
   const handleApplyAgentData = (suggestedData: Partial<DocumentInputForm>) => {
@@ -219,6 +313,7 @@ function MainApp() {
     try {
       const generatedPres = await requestPresentationGeneration(data);
       setActivePresentation(generatedPres);
+      setAppMode('presentation_generator');
       setCurrentView('viewer');
 
       await savePresentation(generatedPres);
@@ -299,6 +394,7 @@ function MainApp() {
     try {
       const generatedExcel = await requestGenerateExcel(formData);
       setActiveExcel(generatedExcel);
+      setAppMode('excel_generator');
       setCurrentView('viewer');
 
       await saveExcelDocument(generatedExcel);
@@ -342,6 +438,7 @@ function MainApp() {
     try {
       const generatedForm = await requestGenerateBusinessForm(formData);
       setActiveForm(generatedForm);
+      setAppMode('form_studio');
       setCurrentView('viewer');
 
       await saveBusinessForm(generatedForm);
@@ -375,6 +472,84 @@ function MainApp() {
       setActiveForm(null);
       setCurrentView('form');
     }
+  };
+
+  // ---------------- Market Actions & Handlers ----------------
+
+  const handleOpenPublishForDoc = (doc: GeneratedDocument) => {
+    setPublishModalData({
+      id: doc.id,
+      productType: 'doc',
+      title: doc.title,
+      subtitle: `${doc.customField || doc.field} | ${doc.customDocumentType || doc.documentType}`,
+      summary: doc.sections?.[0]?.content?.slice(0, 160) || '체계적인 목차와 내용으로 구성된 전문 비즈니스 문서입니다.',
+      category: 'management',
+      content: doc,
+    });
+    setIsPublishModalOpen(true);
+  };
+
+  const handleOpenPublishForPres = (pres: PresentationDocument) => {
+    setPublishModalData({
+      id: pres.id,
+      productType: 'presentation',
+      title: pres.title,
+      subtitle: pres.subtitle,
+      summary: pres.subtitle || `총 ${pres.slides?.length || 0}장으로 구성된 프리미엄 프레젠테이션 덱입니다.`,
+      category: 'marketing',
+      content: pres,
+    });
+    setIsPublishModalOpen(true);
+  };
+
+  const handleOpenPublishForExcel = (excel: ExcelDocument) => {
+    setPublishModalData({
+      id: excel.id,
+      productType: 'excel',
+      title: excel.title,
+      subtitle: excel.subtitle || excel.company || '비즈니스 엑셀 모델',
+      summary: excel.executiveSummary || `재무/운영 분석 및 KPI 대시보드가 포함된 실무 엑셀 스프레드시트입니다.`,
+      category: 'finance',
+      content: excel,
+    });
+    setIsPublishModalOpen(true);
+  };
+
+  const handleOpenPublishForForm = (form: BusinessFormDocument) => {
+    setPublishModalData({
+      id: form.id,
+      productType: 'form_studio',
+      title: form.title,
+      subtitle: `문서번호: ${form.docNumber} | 기안자: ${form.drafter?.name || ''}`,
+      summary: form.sections?.[0]?.content || `표준 결재선과 법적 효력을 갖춘 비즈니스 공문서 서식입니다.`,
+      category: 'legal',
+      content: form,
+    });
+    setIsPublishModalOpen(true);
+  };
+
+  const handleRemixMarketItem = (item: MarketItem) => {
+    if (item.productType === 'presentation') {
+      setActivePresentation(item.contentData);
+      setAppMode('presentation_generator');
+      setCurrentView('viewer');
+    } else if (item.productType === 'excel') {
+      setActiveExcel(item.contentData);
+      setAppMode('excel_generator');
+      setCurrentView('viewer');
+    } else if (item.productType === 'form_studio') {
+      setActiveForm(item.contentData);
+      setAppMode('form_studio');
+      setCurrentView('viewer');
+    } else {
+      setActiveDocument(item.contentData);
+      setAppMode('doc_generator');
+      setCurrentView('viewer');
+    }
+
+    try {
+      confetti({ particleCount: 80, spread: 90, origin: { y: 0.6 } });
+    } catch {}
   };
 
   // ---------------- Global Navigation ----------------
@@ -416,6 +591,10 @@ function MainApp() {
           industryTops={adminMetrics.industryTops}
           recentLogs={adminMetrics.recentLogs}
           userList={adminMetrics.userList}
+          documents={savedDocuments}
+          presentations={savedPresentations}
+          excels={savedExcelDocs}
+          forms={savedForms}
           onBackToApp={() => {
             setAppMode('form_studio');
             setCurrentView('form');
@@ -423,10 +602,10 @@ function MainApp() {
           onRefreshData={async () => {
             try {
               const [docs, pres, excels, forms] = await Promise.all([
-                fetchAllDocuments(),
-                fetchAllPresentations(),
-                fetchAllExcelDocuments(),
-                fetchAllBusinessForms(),
+                fetchAllDocumentsForAdmin(),
+                fetchAllPresentationsForAdmin(),
+                fetchAllExcelDocumentsForAdmin(),
+                fetchAllBusinessFormsForAdmin(),
               ]);
               setSavedDocuments(docs);
               setSavedPresentations(pres);
@@ -435,6 +614,46 @@ function MainApp() {
             } catch (err) {
               console.error('Refresh admin data error:', err);
             }
+          }}
+          onEditDocument={(doc) => {
+            setActiveDocument(doc);
+            setAppMode('doc_generator');
+            setCurrentView('viewer');
+          }}
+          onDeleteDocument={async (id) => {
+            await deleteDocument(id);
+            const updated = await fetchAllDocumentsForAdmin();
+            setSavedDocuments(updated);
+          }}
+          onEditPresentation={(pres) => {
+            setActivePresentation(pres);
+            setAppMode('presentation_generator');
+            setCurrentView('viewer');
+          }}
+          onDeletePresentation={async (id) => {
+            await deletePresentation(id);
+            const updated = await fetchAllPresentationsForAdmin();
+            setSavedPresentations(updated);
+          }}
+          onEditExcel={(excel) => {
+            setActiveExcel(excel);
+            setAppMode('excel_generator');
+            setCurrentView('viewer');
+          }}
+          onDeleteExcel={async (id) => {
+            await deleteExcelDocument(id);
+            const updated = await fetchAllExcelDocumentsForAdmin();
+            setSavedExcelDocs(updated);
+          }}
+          onEditForm={(form) => {
+            setActiveForm(form);
+            setAppMode('form_studio');
+            setCurrentView('viewer');
+          }}
+          onDeleteForm={async (userId, id) => {
+            await deleteBusinessFormForAdmin(userId, id);
+            const updated = await fetchAllBusinessFormsForAdmin();
+            setSavedForms(updated);
           }}
         />
       </div>
@@ -485,18 +704,36 @@ function MainApp() {
 
       {/* Main Content Workspace */}
       <main className="flex-1">
-        {appMode === 'form_studio' ? (
+        {appMode === 'intro' ? (
+          <IntroPage
+            onSelectAppMode={handleSelectMode}
+            onOpenAgent={() => setIsAgentOpen(true)}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            onApplyPreset={handleSelectPreset}
+          />
+        ) : appMode === 'market' ? (
+          /* Open Marketplace & Webzine Studio */
+          <MarketHub
+            currentUser={currentUser}
+            initialDocId={marketInitialDocId}
+            onRemixToStudio={handleRemixMarketItem}
+            onOpenMyDocuments={() => setIsSavedDocsOpen(true)}
+            onRequireAuth={() => setIsAuthModalOpen(true)}
+          />
+        ) : appMode === 'form_studio' ? (
           /* Form Studio */
           currentView === 'form' ? (
             <FormGeneratorForm
               onSubmit={handleGenerateForm}
               isLoading={isGeneratingForm}
+              initialData={formStudioFormData}
             />
           ) : activeForm ? (
             <FormViewer
               document={activeForm}
               onUpdateDocument={handleUpdateFormDocument}
               onBackToForm={() => setCurrentView('form')}
+              onPublishToMarket={() => handleOpenPublishForForm(activeForm)}
             />
           ) : (
             <div className="text-center py-20 text-slate-500">
@@ -515,12 +752,14 @@ function MainApp() {
             <ExcelGeneratorForm
               onGenerate={handleGenerateExcel}
               isLoading={isGeneratingExcel}
+              initialData={excelFormData}
             />
           ) : activeExcel ? (
             <ExcelViewer
               document={activeExcel}
               onUpdateDocument={handleUpdateExcelDocument}
               onBackToForm={() => setCurrentView('form')}
+              onPublishToMarket={() => handleOpenPublishForExcel(activeExcel)}
             />
           ) : (
             <div className="text-center py-20 text-slate-500">
@@ -549,6 +788,7 @@ function MainApp() {
               onUpdatePresentation={handleUpdatePresentation}
               onBackToForm={() => setCurrentView('form')}
               onRegenerateSlide={handleRegenerateSlide}
+              onPublishToMarket={() => handleOpenPublishForPres(activePresentation)}
             />
           ) : (
             <div className="text-center py-20 text-slate-500">
@@ -578,6 +818,7 @@ function MainApp() {
               onDeleteDocument={handleDeleteDocument}
               onRegenerateAll={() => handleGenerateDoc(activeDocument as any)}
               onNewDocument={handleNewItem}
+              onPublishToMarket={() => handleOpenPublishForDoc(activeDocument)}
             />
           ) : (
             <div className="text-center py-20 text-slate-500">
@@ -626,6 +867,7 @@ function MainApp() {
         }}
         onDeleteDocument={handleDeleteDocument}
         onToggleStar={handleToggleStar}
+        onPublishToMarket={(doc) => handleOpenPublishForDoc(doc)}
       />
 
       <SavedPresentationsModal
@@ -638,6 +880,7 @@ function MainApp() {
           setCurrentView('viewer');
         }}
         onDeletePresentation={handleDeletePresentation}
+        onPublishToMarket={(pres) => handleOpenPublishForPres(pres)}
       />
 
       <SavedExcelModal
@@ -650,6 +893,7 @@ function MainApp() {
           setCurrentView('viewer');
         }}
         onDeleteDocument={handleDeleteExcel}
+        onPublishToMarket={(doc) => handleOpenPublishForExcel(doc)}
       />
 
       <SavedFormsModal
@@ -662,6 +906,7 @@ function MainApp() {
           setCurrentView('viewer');
         }}
         onDeleteForm={handleDeleteForm}
+        onPublishToMarket={(form) => handleOpenPublishForForm(form)}
       />
 
       <AuthModal
@@ -669,8 +914,68 @@ function MainApp() {
         onClose={() => setIsAuthModalOpen(false)}
       />
 
+      <UserImageGallery
+        isOpen={isImageGalleryOpen}
+        onClose={() => setIsImageGalleryOpen(false)}
+      />
+
+      <UserKnowledgeHub
+        isOpen={isKnowledgeHubOpen}
+        onClose={() => setIsKnowledgeHubOpen(false)}
+      />
+
+      <UserHelpDrawer
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+      />
+
+      {/* Market Publish Modal */}
+      {publishModalData && (
+        <MarketPublishModal
+          isOpen={isPublishModalOpen}
+          onClose={() => setIsPublishModalOpen(false)}
+          documentData={publishModalData}
+          currentUser={currentUser}
+          onPublishedSuccess={(item) => {
+            setIsPublishModalOpen(false);
+            setMarketInitialDocId(item.id);
+            setAppMode('market');
+            try {
+              confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
+            } catch {}
+          }}
+        />
+      )}
+
+      {/* Floating Smart Help Trigger */}
+      <button
+        onClick={() => setIsHelpOpen(true)}
+        className="fixed bottom-34 right-6 z-40 flex items-center gap-1.5 px-3.5 py-2.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-[11px] shadow-xl transition-all hover:scale-105 active:scale-95 border border-emerald-400/20 cursor-pointer"
+      >
+        <span className="w-4.5 h-4.5 rounded-full bg-white/20 flex items-center justify-center text-[10px]">📢</span>
+        <span>스마트 도움말</span>
+      </button>
+
+      {/* Floating Knowledge Hub Trigger */}
+      <button
+        onClick={() => setIsKnowledgeHubOpen(true)}
+        className="fixed bottom-20 right-6 z-40 flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-cyan-600 to-indigo-650 hover:from-cyan-500 hover:to-indigo-550 text-white font-bold text-xs shadow-xl transition-all hover:scale-105 active:scale-95 border border-cyan-400/20 cursor-pointer"
+      >
+        <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">💡</span>
+        <span>실시간 지식허브</span>
+      </button>
+
+      {/* Floating Image Gallery Trigger */}
+      <button
+        onClick={() => setIsImageGalleryOpen(true)}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-xl transition-all hover:scale-105 active:scale-95 border border-indigo-400/20 cursor-pointer"
+      >
+        <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">🖼️</span>
+        <span>공용 이미지 갤러리</span>
+      </button>
+
       {/* Footer */}
-      {currentView === 'form' && (
+      {currentView === 'form' && appMode !== 'intro' && appMode !== 'market' && (
         <footer className="border-t border-slate-200 bg-white py-6 mt-12 text-center text-xs text-slate-500">
           <div className="max-w-7xl mx-auto px-4">
             <p className="font-semibold text-slate-700">

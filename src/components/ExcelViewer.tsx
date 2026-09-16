@@ -34,6 +34,7 @@ import {
   Check,
   Edit3,
   HelpCircle,
+  Upload,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -52,12 +53,14 @@ interface ExcelViewerProps {
   document: ExcelDocument;
   onUpdateDocument?: (doc: ExcelDocument) => void;
   onBackToForm?: () => void;
+  onPublishToMarket?: () => void;
 }
 
 export const ExcelViewer: React.FC<ExcelViewerProps> = ({
   document: initialDocument,
   onUpdateDocument,
   onBackToForm,
+  onPublishToMarket,
 }) => {
   const [doc, setDoc] = useState<ExcelDocument>(initialDocument);
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
@@ -441,6 +444,17 @@ export const ExcelViewer: React.FC<ExcelViewerProps> = ({
               AI
             </span>
           </button>
+
+          {onPublishToMarket && (
+            <button
+              onClick={onPublishToMarket}
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-black shadow-md flex items-center gap-2 transition-all active:scale-[0.98] cursor-pointer hover:scale-[1.02]"
+              title="오픈 마켓플레이스에 엑셀 템플릿 발행하기"
+            >
+              <Upload className="w-4 h-4" />
+              <span>마켓 발행</span>
+            </button>
+          )}
 
           {onBackToForm && (
             <button

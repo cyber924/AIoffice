@@ -67,11 +67,13 @@ export async function saveDocument(document: GeneratedDocument): Promise<void> {
   // If user is authenticated in Firebase, persist to Firestore
   if (auth.currentUser) {
     const uid = auth.currentUser.uid;
+    const userEmail = auth.currentUser.email || '';
     try {
       const docRef = doc(db, 'documents', document.id);
       await setDoc(docRef, {
         id: document.id,
         userId: uid,
+        userEmail: userEmail,
         title: document.title,
         subtitle: document.subtitle || '',
         field: document.field,
@@ -220,6 +222,7 @@ export async function savePresentation(presentation: PresentationDocument): Prom
         {
           ...presentation,
           userId: auth.currentUser.uid,
+          userEmail: auth.currentUser.email || '',
           updatedAt: Date.now(),
         },
         { merge: true }
@@ -297,4 +300,82 @@ export async function deletePresentation(id: string): Promise<void> {
     }
   }
 }
+
+export async function fetchAllDocumentsForAdmin(): Promise<GeneratedDocument[]> {
+  try {
+    const docsRef = collection(db, 'documents');
+    const snapshot = await getDocs(docsRef);
+    const list: GeneratedDocument[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      list.push({
+        id: data.id || docSnap.id,
+        userId: data.userId || '',
+        userEmail: data.userEmail || '',
+        title: data.title,
+        subtitle: data.subtitle,
+        field: data.field,
+        customField: data.customField,
+        documentType: data.documentType,
+        customDocumentType: data.customDocumentType,
+        purpose: data.purpose || '',
+        targetAudience: data.targetAudience || '',
+        professionalLevel: data.professionalLevel || 'practitioner',
+        length: data.length || 'standard',
+        keywords: data.keywords || [],
+        executiveSummary: data.executiveSummary || '',
+        sections: data.sections || [],
+        tableOfContents: data.tableOfContents || [],
+        conclusion: data.conclusion || '',
+        metadata: data.metadata || {
+          createdAt: data.createdAt || Date.now(),
+          updatedAt: data.updatedAt || Date.now(),
+          wordCount: 0,
+          charCount: 0,
+          estimatedReadTimeMinutes: 1,
+          version: 1,
+          isStarred: false,
+        },
+      } as any);
+    });
+    return list.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0));
+  } catch (err) {
+    console.error('[Firestore] Error fetching admin documents:', err);
+    return [];
+  }
+}
+
+export async function fetchAllPresentationsForAdmin(): Promise<PresentationDocument[]> {
+  try {
+    const snapshot = await getDocs(collection(db, 'presentations'));
+    const list: PresentationDocument[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      list.push({
+        id: docSnap.id,
+        userId: data.userId || '',
+        userEmail: data.userEmail || '',
+        title: data.title || '무제 프레젠테이션',
+        subtitle: data.subtitle || '',
+        company: data.company || '',
+        author: data.author || '',
+        field: data.field || 'management',
+        presentationType: data.presentationType || 'ir_pitch',
+        targetAudience: data.targetAudience || '',
+        theme: data.theme || 'dark_navy',
+        slides: data.slides || [],
+        metadata: data.metadata || {
+          createdAt: data.createdAt || Date.now(),
+          updatedAt: data.updatedAt || Date.now(),
+          slideCount: data.slides?.length || 0,
+        },
+      } as any);
+    });
+    return list.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0));
+  } catch (err) {
+    console.error('[Firestore] Error fetching admin presentations:', err);
+    return [];
+  }
+}
+
 

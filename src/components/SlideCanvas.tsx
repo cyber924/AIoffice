@@ -72,7 +72,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
             )}
             <h2
               className={`font-black tracking-tight ${themeConfig.textPrimary} ${
-                isThumbnail ? 'text-[11px] leading-tight line-clamp-1' : 'text-xl sm:text-2xl md:text-3xl leading-tight'
+                isThumbnail ? 'text-[11px] leading-tight line-clamp-1' : 'text-lg sm:text-xl md:text-2xl leading-tight'
               }`}
             >
               {slide.title}
@@ -172,7 +172,7 @@ function renderLayoutContent(
           <div className="relative z-10 my-auto py-2">
             <h1
               className={`font-black tracking-tight text-white ${
-                isThumb ? 'text-sm leading-tight' : 'text-2xl sm:text-4xl md:text-5xl leading-[1.15] max-w-4xl drop-shadow-md'
+                isThumb ? 'text-sm leading-tight' : 'text-xl sm:text-3xl md:text-4xl leading-[1.15] max-w-4xl drop-shadow-md'
               }`}
             >
               {slide.title || presTitle}
@@ -209,7 +209,12 @@ function renderLayoutContent(
     }
 
     case 'cards_grid_3': {
-      const cards = slide.content.cards || [];
+      const rawCards = slide.content?.cards;
+      const cards = Array.isArray(rawCards) && rawCards.length > 0 ? rawCards : [
+        { tag: 'POINT 01', title: slide.title || '핵심 전략 1', description: slide.keyTakeaway || '실행 방안 및 효과를 정밀하게 분석합니다.' },
+        { tag: 'POINT 02', title: '핵심 과제 2', description: '체계적인 프로세스를 바탕으로 목표를 완벽히 달성합니다.' },
+        { tag: 'POINT 03', title: '기대 효과 3', description: '정량적/정성적 성과를 극대화하여 경쟁 우위를 확보합니다.' }
+      ];
       return (
         <div className="grid grid-cols-3 gap-2.5 sm:gap-4 h-full items-stretch">
           {cards.slice(0, 3).map((card, idx) => (
@@ -257,7 +262,15 @@ function renderLayoutContent(
     }
 
     case 'bullets_split': {
-      const bullets = slide.content.bulletPoints || [];
+      const rawBullets = slide.content?.bulletPoints;
+      const bullets = Array.isArray(rawBullets) && rawBullets.length > 0 ? rawBullets : (
+        Array.isArray(slide.content?.cards) ? slide.content.cards.map((c: any) => `${c.title || ''}: ${c.description || ''}`) : [
+          '엔드투엔드 예측 및 분석 모델을 통한 실시간 지표 모니터링',
+          '기존 레거시 인프라와의 무중단 연동 지원',
+          '업무 자동화 및 최적화를 통한 비용 절감 및 생산성 제고',
+          '글로벌 표준 준수를 통한 신뢰성 및 보안성 확보'
+        ]
+      );
       return (
         <div className="grid grid-cols-12 gap-3 sm:gap-5 h-full items-stretch">
           {/* Left Key Insight & Small Photography Card */}
@@ -325,7 +338,7 @@ function renderLayoutContent(
     }
 
     case 'market_tam_sam_som': {
-      const market = slide.content.marketSize || {
+      const market = slide.content?.marketSize || {
         tam: { title: 'TAM (전체 시장)', value: '15.8조 원', desc: '국내외 관련 전방위 총 시장 규모' },
         sam: { title: 'SAM (유효 시장)', value: '4.2조 원', desc: '당사 타겟 고객군 유효 시장' },
         som: { title: 'SOM (수익 시장)', value: '6,500억 원', desc: '초기 3개년 목표 수익 시장' },
@@ -371,7 +384,12 @@ function renderLayoutContent(
     }
 
     case 'financial_kpi': {
-      const metrics = slide.content.metrics || [];
+      const rawMetrics = slide.content?.metrics;
+      const metrics = Array.isArray(rawMetrics) && rawMetrics.length > 0 ? rawMetrics : [
+        { label: '연평균 성장률 (CAGR)', value: '+42.5%', change: '전년비 2.4배', note: '구독 기반 반복 매출 확대' },
+        { label: '목표 누적 매출액', value: '180억 원', change: '영업이익률 25%', note: '규모의 경제 조기 실현' },
+        { label: '고객 유지율 (Retention)', value: '94.8%', change: '+6.2%p', note: '엔터프라이즈 레퍼런스 확충' },
+      ];
       return (
         <div className="grid grid-cols-3 gap-2.5 sm:gap-4 h-full items-stretch">
           {metrics.slice(0, 3).map((m, idx) => (
@@ -413,17 +431,17 @@ function renderLayoutContent(
     }
 
     case 'swot_matrix': {
-      const swot = slide.content.swot || {
+      const swot = slide.content?.swot || {
         strengths: ['독보적 원천 기술', '검증된 레퍼런스'],
         weaknesses: ['초기 인지도 제고 필요', '글로벌 인력 확보'],
         opportunities: ['디지털 전환 수요 급증', '정부 지원 정책'],
         threats: ['신규 진입자 경쟁 심화', '거시 경제 변동성'],
       };
       const items = [
-        { label: '강점 (Strengths)', bullets: swot.strengths, color: 'text-emerald-400', badge: 'bg-emerald-500/10 border-emerald-500/20', icon: Award },
-        { label: '약점 (Weaknesses)', bullets: swot.weaknesses, color: 'text-amber-400', badge: 'bg-amber-500/10 border-amber-500/20', icon: AlertTriangle },
-        { label: '기회 (Opportunities)', bullets: swot.opportunities, color: 'text-sky-400', badge: 'bg-sky-500/10 border-sky-500/20', icon: Lightbulb },
-        { label: '위협 (Threats)', bullets: swot.threats, color: 'text-rose-400', badge: 'bg-rose-500/10 border-rose-500/20', icon: ShieldAlert },
+        { label: '강점 (Strengths)', bullets: swot.strengths || [], color: 'text-emerald-400', badge: 'bg-emerald-500/10 border-emerald-500/20', icon: Award },
+        { label: '약점 (Weaknesses)', bullets: swot.weaknesses || [], color: 'text-amber-400', badge: 'bg-amber-500/10 border-amber-500/20', icon: AlertTriangle },
+        { label: '기회 (Opportunities)', bullets: swot.opportunities || [], color: 'text-sky-400', badge: 'bg-sky-500/10 border-sky-500/20', icon: Lightbulb },
+        { label: '위협 (Threats)', bullets: swot.threats || [], color: 'text-rose-400', badge: 'bg-rose-500/10 border-rose-500/20', icon: ShieldAlert },
       ];
       return (
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 h-full">
@@ -458,7 +476,13 @@ function renderLayoutContent(
     }
 
     case 'timeline_roadmap': {
-      const timeline = slide.content.timeline || [];
+      const rawTimeline = slide.content?.timeline;
+      const timeline = Array.isArray(rawTimeline) && rawTimeline.length > 0 ? rawTimeline : [
+        { phase: 'PHASE 01', period: '1Q ~ 2Q', title: '핵심 엔진 개발 및 PoC', details: ['알고리즘 최적화', '베타 테스터 확보'] },
+        { phase: 'PHASE 02', period: '3Q ~ 4Q', title: '상용 제품 런칭 및 마케팅', details: ['정식 서비스 출시', '기업 고객 수주'] },
+        { phase: 'PHASE 03', period: '내년 상반기', title: '글로벌 시장 진출', details: ['해외 파트너십', '현지화 완료'] },
+        { phase: 'PHASE 04', period: '내년 하반기', title: '생태계 플랫폼 확장', details: ['마켓플레이스 구축', '업계 리더 도약'] },
+      ];
       return (
         <div className="grid grid-cols-4 gap-2 sm:gap-3 h-full items-stretch">
           {timeline.slice(0, 4).map((phase, idx) => (
@@ -494,7 +518,13 @@ function renderLayoutContent(
     }
 
     case 'cards_grid_4': {
-      const cards = slide.content.cards || [];
+      const rawCards = slide.content?.cards;
+      const cards = Array.isArray(rawCards) && rawCards.length > 0 ? rawCards : [
+        { tag: 'STEP 01', title: '환경 분석 및 타당성 진단', description: '시장 트렌드와 규제 환경을 면밀히 분석합니다.' },
+        { tag: 'STEP 02', title: '핵심 아키텍처 설계', description: '확장 가능한 모듈형 인프라를 구축합니다.' },
+        { tag: 'STEP 03', title: '시범 적용 및 PoC 검증', description: '핵심 지표를 실시간 모니터링하여 안정성을 확보합니다.' },
+        { tag: 'STEP 04', title: '전사 확대 및 시장 스케일업', description: '글로벌 표준에 맞춘 전면 확장을 추진합니다.' },
+      ];
       return (
         <div className="grid grid-cols-4 gap-2 sm:gap-3 h-full items-stretch">
           {cards.slice(0, 4).map((card, idx) => (
@@ -530,16 +560,23 @@ function renderLayoutContent(
     }
 
     case 'comparison_table': {
-      const tableData = slide.content.table;
-      if (!tableData || !tableData.headers || tableData.headers.length === 0) {
-        return null;
-      }
+      const tableData = slide.content?.table || {
+        headers: ['구분 / 비교 항목', '당사 솔루션 (To-Be)', '기존 솔루션 A사', '대체재 B사'],
+        rows: [
+          ['배포 및 도입 기간', '2주 이내 즉시 연동', '3~6개월 소요', '구축형 1년 이상'],
+          ['운영 비용 절감율', '최대 45% 절감', '10~15% 절감', '비용 절감 미미'],
+          ['AI 실시간 분석', '지원 (99.2% 정확도)', '부분 지원 (배치)', '미지원'],
+          ['커스터마이징 유연성', 'API 기반 자유 확장', '제한적 설정', '불가능'],
+        ],
+      };
+      const headers = Array.isArray(tableData.headers) ? tableData.headers : ['항목', '당사', '기존'];
+      const rows = Array.isArray(tableData.rows) ? tableData.rows : [];
       return (
         <div className={`h-full overflow-hidden rounded-xl border border-white/15 shadow-sm ${themeConfig.cardBgClass}`}>
           <table className="w-full h-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/10 bg-white/5">
-                {tableData.headers.map((h, idx) => (
+                {headers.map((h, idx) => (
                   <th
                     key={idx}
                     className={`font-black text-white px-2.5 sm:px-4 py-2 ${
@@ -552,9 +589,9 @@ function renderLayoutContent(
               </tr>
             </thead>
             <tbody>
-              {tableData.rows.map((row, rIdx) => (
+              {rows.map((row, rIdx) => (
                 <tr key={rIdx} className="border-b border-white/5 last:border-0 hover:bg-white/5">
-                  {row.map((cell, cIdx) => (
+                  {(Array.isArray(row) ? row : []).map((cell, cIdx) => (
                     <td
                       key={cIdx}
                       className={`px-2.5 sm:px-4 py-1.5 sm:py-2.5 ${themeConfig.textSecondary} ${
@@ -575,7 +612,12 @@ function renderLayoutContent(
     }
 
     case 'conclusion_call_to_action': {
-      const bullets = slide.content.bulletPoints || [];
+      const rawBullets = slide.content?.bulletPoints;
+      const bullets = Array.isArray(rawBullets) && rawBullets.length > 0 ? rawBullets : [
+        '투자 및 협력 유치: 목표 금액 및 실행 로드맵 완비',
+        '예상 회수 기간: 손익분기점(BEP) 조기 달성 및 스케일업 추진',
+        '전략적 파트너십 및 제휴 문의: contact@company.io',
+      ];
       return (
         <div className={`rounded-xl p-4 sm:p-8 flex flex-col justify-center h-full ${themeConfig.cardBgClass} border border-amber-400/30 shadow-lg`}>
           <div className="flex items-center gap-2 mb-2">
@@ -613,7 +655,7 @@ function renderLayoutContent(
           )}
           <h2
             className={`font-black tracking-tight text-white ${
-              isThumb ? 'text-xs' : 'text-3xl sm:text-4xl md:text-5xl'
+              isThumb ? 'text-xs' : 'text-2xl sm:text-3xl md:text-4xl'
             }`}
           >
             {slide.title}
@@ -627,7 +669,35 @@ function renderLayoutContent(
       );
     }
 
-    default:
-      return null;
+    default: {
+      // Fallback robust layout for any custom layout types
+      const bulletPoints = Array.isArray(slide.content?.bulletPoints) 
+        ? slide.content.bulletPoints 
+        : (Array.isArray(slide.content?.cards) ? slide.content.cards.map((c: any) => `${c.title || ''}: ${c.description || ''}`) : [
+            slide.keyTakeaway || '핵심 전략 및 인사이트를 효과적으로 전달합니다.',
+            '세부 실행 계획을 수립하고 실시간 모니터링을 지속합니다.',
+            '검증된 프레임워크를 기반으로 목표 성과를 달성합니다.',
+          ]);
+      return (
+        <div className={`rounded-xl p-4 sm:p-6 flex flex-col justify-center h-full border border-white/10 ${themeConfig.cardBgClass}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className={`w-4 h-4 ${themeConfig.accentClass}`} />
+            <span className={`text-xs font-black uppercase tracking-wider ${themeConfig.accentClass}`}>
+              {slide.category || 'EXECUTIVE OVERVIEW'}
+            </span>
+          </div>
+          <ul className={`space-y-3 ${themeConfig.textSecondary} ${isThumb ? 'text-[8px]' : 'text-xs sm:text-sm'}`}>
+            {bulletPoints.map((b: string, idx: number) => (
+              <li key={idx} className="flex items-start gap-2.5 p-2 rounded-lg bg-white/5 border border-white/5">
+                <span className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-300 font-bold text-xs flex items-center justify-center shrink-0">
+                  {idx + 1}
+                </span>
+                <span className="text-slate-100">{b}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
   }
 }

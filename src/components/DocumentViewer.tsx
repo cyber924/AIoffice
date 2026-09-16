@@ -13,7 +13,8 @@ import {
   FileText,
   BookmarkCheck,
   RotateCcw,
-  Plus
+  Plus,
+  Upload,
 } from 'lucide-react';
 import { GeneratedDocument, DocumentSection } from '../types/document';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -28,6 +29,7 @@ interface DocumentViewerProps {
   onDeleteDocument: (docId: string) => void;
   onRegenerateAll: () => void;
   onNewDocument: () => void;
+  onPublishToMarket?: () => void;
 }
 
 export const DocumentViewer: React.FC<DocumentViewerProps> = ({
@@ -37,6 +39,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
   onDeleteDocument,
   onRegenerateAll,
   onNewDocument,
+  onPublishToMarket,
 }) => {
   const [editingSection, setEditingSection] = useState<DocumentSection | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -172,6 +175,18 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
             <RotateCcw className="w-4 h-4 text-slate-500" />
             <span className="hidden sm:inline">전체 재생성</span>
           </button>
+
+          {onPublishToMarket && (
+            <button
+              type="button"
+              onClick={onPublishToMarket}
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              title="오픈 마켓플레이스에 문서 발행하기"
+            >
+              <Upload className="w-4 h-4" />
+              <span>마켓 발행</span>
+            </button>
+          )}
 
           <button
             type="button"
