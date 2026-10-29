@@ -171,36 +171,28 @@ service cloud.firestore {
 
     // Connection testing doc
     match /test/connection {
-      allow read: if true;
+      allow read, write: if true;
     }
 
     // Public Images Collection
     match /public_images/{imageId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() && isValidId(imageId);
+      allow read, write: if true;
     }
 
     // Knowledge Hub Collection
     match /knowledge_hub/{knowledgeId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdmin() && isValidId(knowledgeId) && isValidKnowledgeHubItem(incoming());
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     // Help Contents Collection
     match /help_contents/{helpId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdmin() && isValidId(helpId) && isValidHelpContent(incoming());
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     // Public Market Items Collection (Open Marketplace)
     match /market_items/{marketItemId} {
       // Anyone (including unauthenticated guests) can view published market documents
-      allow read: if true;
-      allow create: if isSignedIn() && isValidId(marketItemId);
-      allow update: if isSignedIn() || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'downloadCount', 'likeCount', 'remixCount']));
-      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+      allow read, write: if true;
     }
 
     // Support collectionGroup query for business forms

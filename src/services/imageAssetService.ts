@@ -107,7 +107,7 @@ export async function compressImageToDataUrl(
 }
 
 // Pre-defined elegant SVG vector illustrations to populate the asset gallery instantly
-const DEFAULT_PRESETS: PublicImageItem[] = [
+export const DEFAULT_PRESETS: PublicImageItem[] = [
   {
     id: 'default-img-cover-ai',
     title: '미래 지향적 AI 솔루션 사업기획서 표지 일러스트',

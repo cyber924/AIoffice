@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { MarketItem } from '../types/market';
+import { RECOVERED_OLD_MARKET_ITEMS } from '../data/recoveredOldDbMarket';
 
 const COLLECTION_NAME = 'market_items';
 
@@ -376,6 +377,14 @@ export const PRESET_MARKET_ITEMS: MarketItem[] = [
   }
 ];
 
+// Build deduplicated fallback items incorporating both built-in presets and recovered old DB items
+export const ALL_FALLBACK_MARKET_ITEMS: MarketItem[] = (() => {
+  const map = new Map<string, MarketItem>();
+  PRESET_MARKET_ITEMS.forEach((it) => map.set(it.id, it));
+  RECOVERED_OLD_MARKET_ITEMS.forEach((it) => map.set(it.id, it));
+  return Array.from(map.values());
+})();
+
 /**
  * Get all published market items (publicly accessible)
  */
@@ -395,16 +404,16 @@ export async function getMarketItems(): Promise<MarketItem[]> {
     if (items.length === 0) {
       console.log('[Market] Database is empty. Seeding initial rich presets...');
       await Promise.all(
-        PRESET_MARKET_ITEMS.map((preset) => saveMarketItemToDb(preset))
+        ALL_FALLBACK_MARKET_ITEMS.map((preset) => saveMarketItemToDb(preset))
       );
-      return [...PRESET_MARKET_ITEMS].sort((a, b) => b.createdAt - a.createdAt);
+      return [...ALL_FALLBACK_MARKET_ITEMS].sort((a, b) => b.createdAt - a.createdAt);
     }
 
     // Sort in memory by createdAt descending
     return items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (error) {
     console.warn('[Market] Failed to load from Firestore, falling back to presets:', error);
-    return [...PRESET_MARKET_ITEMS].sort((a, b) => b.createdAt - a.createdAt);
+    return [...ALL_FALLBACK_MARKET_ITEMS].sort((a, b) => b.createdAt - a.createdAt);
   }
 }
 
@@ -421,12 +430,12 @@ export async function getMarketItemById(id: string): Promise<MarketItem | null> 
         id: docSnap.id,
       };
     }
-    // Fallback: check preset
-    const foundPreset = PRESET_MARKET_ITEMS.find((p) => p.id === id);
-    return foundPreset || null;
+    // Fallback: check preset and recovered items
+    const found = ALL_FALLBACK_MARKET_ITEMS.find((p) => p.id === id);
+    return found || null;
   } catch (error) {
     console.error('[Market] Failed to fetch item by ID:', error);
-    return PRESET_MARKET_ITEMS.find((p) => p.id === id) || null;
+    return ALL_FALLBACK_MARKET_ITEMS.find((p) => p.id === id) || null;
   }
 }
 

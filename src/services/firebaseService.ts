@@ -11,6 +11,7 @@ import {
 import { db, auth } from './firebase';
 import { GeneratedDocument } from '../types/document';
 import { PresentationDocument } from '../types/presentation';
+import { RECOVERED_SAVED_DOCUMENTS, RECOVERED_SAVED_PRESENTATIONS } from '../data/recoveredDocuments';
 
 const LOCAL_STORAGE_KEY = 'professional_documents_store_v2';
 const LOCAL_STORAGE_PRES_KEY = 'professional_presentations_store_v1';
@@ -37,11 +38,24 @@ export function isUserLoggedIn(): boolean {
 export function getLocalDocuments(): GeneratedDocument[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    if (!raw) {
+      if (RECOVERED_SAVED_DOCUMENTS.length > 0) {
+        saveLocalDocuments(RECOVERED_SAVED_DOCUMENTS);
+        return [...RECOVERED_SAVED_DOCUMENTS];
+      }
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      if (RECOVERED_SAVED_DOCUMENTS.length > 0) {
+        saveLocalDocuments(RECOVERED_SAVED_DOCUMENTS);
+        return [...RECOVERED_SAVED_DOCUMENTS];
+      }
+    }
+    return parsed;
   } catch (e) {
     console.error('Error reading local documents:', e);
-    return [];
+    return [...RECOVERED_SAVED_DOCUMENTS];
   }
 }
 
@@ -107,10 +121,10 @@ export async function fetchAllDocuments(): Promise<GeneratedDocument[]> {
     const path = 'documents';
     try {
       const docsRef = collection(db, path);
+      // Query without composite index requirement
       const q = query(
         docsRef,
-        where('userId', '==', uid),
-        orderBy('updatedAt', 'desc')
+        where('userId', '==', uid)
       );
       const snapshot = await getDocs(q);
       
@@ -146,6 +160,23 @@ export async function fetchAllDocuments(): Promise<GeneratedDocument[]> {
         });
       });
 
+      // If user cloud documents are empty, automatically seed recovered documents to user's cloud account
+      if (cloudDocs.length === 0 && RECOVERED_SAVED_DOCUMENTS.length > 0) {
+        for (const rDoc of RECOVERED_SAVED_DOCUMENTS) {
+          try {
+            await setDoc(doc(db, 'documents', rDoc.id), {
+              ...rDoc,
+              userId: uid,
+              userEmail: auth.currentUser?.email || '',
+              updatedAt: rDoc.metadata?.updatedAt || Date.now(),
+            }, { merge: true });
+            cloudDocs.push(rDoc);
+          } catch (e) {
+            console.warn('[Firestore] Seed recovered doc failed:', e);
+          }
+        }
+      }
+
       // Merge cloud documents with local documents
       const map = new Map<string, GeneratedDocument>();
       cloudDocs.forEach(d => map.set(d.id, d));
@@ -158,15 +189,20 @@ export async function fetchAllDocuments(): Promise<GeneratedDocument[]> {
       const merged = Array.from(map.values()).sort(
         (a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0)
       );
-      saveLocalDocuments(merged);
-      return merged;
+      if (merged.length > 0) {
+        saveLocalDocuments(merged);
+        return merged;
+      }
+      return [...RECOVERED_SAVED_DOCUMENTS];
     } catch (error) {
       console.warn('[Firestore] Failed to load cloud documents, using local cache:', error);
-      return localDocs;
+      return localDocs.length > 0 ? localDocs : [...RECOVERED_SAVED_DOCUMENTS];
     }
   }
 
-  return localDocs.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0));
+  return localDocs.length > 0
+    ? localDocs.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0))
+    : [...RECOVERED_SAVED_DOCUMENTS];
 }
 
 export async function deleteDocument(id: string): Promise<void> {
@@ -188,11 +224,24 @@ export async function deleteDocument(id: string): Promise<void> {
 export function getLocalPresentations(): PresentationDocument[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_PRES_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    if (!raw) {
+      if (RECOVERED_SAVED_PRESENTATIONS.length > 0) {
+        saveLocalPresentations(RECOVERED_SAVED_PRESENTATIONS);
+        return [...RECOVERED_SAVED_PRESENTATIONS];
+      }
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      if (RECOVERED_SAVED_PRESENTATIONS.length > 0) {
+        saveLocalPresentations(RECOVERED_SAVED_PRESENTATIONS);
+        return [...RECOVERED_SAVED_PRESENTATIONS];
+      }
+    }
+    return parsed;
   } catch (e) {
     console.error('Error reading local presentations:', e);
-    return [];
+    return [...RECOVERED_SAVED_PRESENTATIONS];
   }
 }
 
@@ -265,6 +314,23 @@ export async function fetchAllPresentations(): Promise<PresentationDocument[]> {
         });
       });
 
+      // If cloud presentations are empty, seed recovered presentations to user's cloud account
+      if (cloudList.length === 0 && RECOVERED_SAVED_PRESENTATIONS.length > 0) {
+        for (const rPres of RECOVERED_SAVED_PRESENTATIONS) {
+          try {
+            await setDoc(doc(db, 'presentations', rPres.id), {
+              ...rPres,
+              userId: auth.currentUser.uid,
+              userEmail: auth.currentUser.email || '',
+              updatedAt: rPres.metadata?.updatedAt || Date.now(),
+            }, { merge: true });
+            cloudList.push(rPres);
+          } catch (e) {
+            console.warn('[Firestore] Seed recovered presentation failed:', e);
+          }
+        }
+      }
+
       const map = new Map<string, PresentationDocument>();
       cloudList.forEach(p => map.set(p.id, p));
       localList.forEach(p => {
@@ -276,15 +342,20 @@ export async function fetchAllPresentations(): Promise<PresentationDocument[]> {
       const merged = Array.from(map.values()).sort(
         (a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0)
       );
-      saveLocalPresentations(merged);
-      return merged;
+      if (merged.length > 0) {
+        saveLocalPresentations(merged);
+        return merged;
+      }
+      return [...RECOVERED_SAVED_PRESENTATIONS];
     } catch (error) {
       console.warn('[Firestore] Failed to load cloud presentations:', error);
-      return localList;
+      return localList.length > 0 ? localList : [...RECOVERED_SAVED_PRESENTATIONS];
     }
   }
 
-  return localList.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0));
+  return localList.length > 0
+    ? localList.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0))
+    : [...RECOVERED_SAVED_PRESENTATIONS];
 }
 
 export async function deletePresentation(id: string): Promise<void> {

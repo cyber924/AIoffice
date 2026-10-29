@@ -11,7 +11,7 @@ import { HelpContent } from '../types/help';
 const COLLECTION_NAME = 'help_contents';
 
 // Standard high-quality presets for first-load seeding
-const DEFAULT_HELP_PRESETS: HelpContent[] = [
+export const DEFAULT_HELP_PRESETS: HelpContent[] = [
   {
     id: 'help-announcement-reset',
     type: 'announcement',

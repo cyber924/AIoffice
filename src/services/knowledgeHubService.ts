@@ -19,7 +19,7 @@ export interface KnowledgeHubItem {
 }
 
 // Highly realistic and professional out-of-the-box business templates and news facts
-const DEFAULT_KNOWLEDGE_PRESETS: KnowledgeHubItem[] = [
+export const DEFAULT_KNOWLEDGE_PRESETS: KnowledgeHubItem[] = [
   {
     id: 'kb-corporate-articles',
     title: '스타트업 및 중소기업 설립용 회사 표준 정관',

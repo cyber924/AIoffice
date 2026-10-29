@@ -10,19 +10,36 @@ import {
   where,
   collectionGroup,
 } from 'firebase/firestore';
+import { RECOVERED_SAVED_FORMS } from '../data/recoveredDocuments';
 
 const LOCAL_STORAGE_FORMS_KEY = 'domain_doc_generator_saved_forms_v1';
 
 // Local storage fallback
-function getLocalForms(): BusinessFormDocument[] {
+export function getLocalForms(): BusinessFormDocument[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_FORMS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) {
+      if (RECOVERED_SAVED_FORMS.length > 0) {
+        setLocalForms(RECOVERED_SAVED_FORMS);
+        return [...RECOVERED_SAVED_FORMS];
+      }
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      if (RECOVERED_SAVED_FORMS.length > 0) {
+        setLocalForms(RECOVERED_SAVED_FORMS);
+        return [...RECOVERED_SAVED_FORMS];
+      }
+    }
+    return parsed;
   } catch (err) {
     console.error('Failed to read forms from localStorage', err);
-    return [];
+    return [...RECOVERED_SAVED_FORMS];
   }
 }
+
+export const getLocalBusinessForms = getLocalForms;
 
 function setLocalForms(forms: BusinessFormDocument[]) {
   try {
@@ -72,8 +89,26 @@ export async function fetchAllBusinessForms(): Promise<BusinessFormDocument[]> {
         remoteDocs.push(d.data() as BusinessFormDocument);
       });
 
+      // If user cloud forms are empty, seed recovered forms to user's cloud account
+      if (remoteDocs.length === 0 && RECOVERED_SAVED_FORMS.length > 0) {
+        for (const rForm of RECOVERED_SAVED_FORMS) {
+          try {
+            await setDoc(doc(db, 'users', user.uid, 'business_forms', rForm.id), {
+              ...rForm,
+              userId: user.uid,
+              userEmail: user.email || '',
+              updatedAt: rForm.metadata?.updatedAt || Date.now(),
+            }, { merge: true });
+            remoteDocs.push(rForm);
+          } catch (e) {
+            console.warn('[Firestore] Seed recovered form failed:', e);
+          }
+        }
+      }
+
       if (remoteDocs.length > 0) {
         remoteDocs.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0));
+        setLocalForms(remoteDocs);
         return remoteDocs;
       }
     } catch (err) {
@@ -81,7 +116,9 @@ export async function fetchAllBusinessForms(): Promise<BusinessFormDocument[]> {
     }
   }
 
-  return localForms.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0));
+  return localForms.length > 0
+    ? localForms.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0))
+    : [...RECOVERED_SAVED_FORMS];
 }
 
 export async function deleteBusinessForm(formId: string): Promise<void> {

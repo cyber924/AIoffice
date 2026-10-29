@@ -271,7 +271,7 @@ export const MarketWebzineViewer: React.FC<MarketWebzineViewerProps> = ({
       <section className="relative overflow-hidden pt-12 pb-16 px-4 sm:px-6 lg:px-8 border-b border-slate-800/80 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(99,102,241,0.12),transparent_50%)] pointer-events-none" />
 
-        <div className="max-w-4xl mx-auto space-y-6 relative z-10">
+        <div className="max-w-5xl mx-auto space-y-5 relative z-10">
           {/* Badges & Metadata */}
           <div className="flex flex-wrap items-center gap-2.5">
             {getFormatBadge()}
@@ -302,14 +302,18 @@ export const MarketWebzineViewer: React.FC<MarketWebzineViewerProps> = ({
             )}
           </div>
 
-          {/* Main Title */}
-          <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight sm:leading-tight">
+          {/* Main Title - Font scaled to fit single line without breaking */}
+          <h1 className={`font-black text-white tracking-tight leading-snug break-keep ${
+            item.title.length > 20
+              ? 'text-lg sm:text-xl md:text-2xl lg:text-[26px]'
+              : 'text-xl sm:text-2xl md:text-3xl lg:text-[30px]'
+          }`}>
             {item.title}
           </h1>
 
           {/* Subtitle */}
           {item.subtitle && (
-            <p className="text-base sm:text-xl text-slate-300 font-medium leading-relaxed">
+            <p className="text-sm sm:text-base text-slate-300 font-medium leading-relaxed break-keep">
               {item.subtitle}
             </p>
           )}
@@ -355,7 +359,7 @@ export const MarketWebzineViewer: React.FC<MarketWebzineViewerProps> = ({
       </section>
 
       {/* Main Webzine Reader Body */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
         {/* Executive Summary Card */}
         <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-indigo-500/20 shadow-xl shadow-indigo-950/20 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />

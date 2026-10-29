@@ -14,6 +14,7 @@ import {
   aiEditExcelSpreadsheet,
   generateBusinessForm,
   aiEditBusinessForm,
+  generateRecommendedPresets,
 } from './src/server/geminiGenerator';
 
 dotenv.config();
@@ -828,6 +829,24 @@ app.post('/api/ai-edit-form', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error in ai-edit-form:', error);
     res.status(500).json({ error: error.message || '공문서 양식 수정 중 오류가 발생했습니다.' });
+  }
+});
+
+// 10.4. AI Template Recommendation Endpoint (4 New Presets per round)
+app.post('/api/generate-templates', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    const { existingTitles = [] } = req.body;
+
+    const newPresets = await generateRecommendedPresets(apiKey, existingTitles);
+
+    res.json({
+      success: true,
+      templates: newPresets,
+    });
+  } catch (error: any) {
+    console.error('Error in generate-templates:', error);
+    res.status(500).json({ error: error.message || 'AI 템플릿 추천 생성 중 오류가 발생했습니다.' });
   }
 });
 

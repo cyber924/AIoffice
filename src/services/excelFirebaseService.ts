@@ -9,17 +9,31 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { ExcelDocument } from '../types/excel';
+import { RECOVERED_SAVED_EXCELS } from '../data/recoveredDocuments';
 
 const LOCAL_STORAGE_EXCEL_KEY = 'professional_excel_docs_store_v1';
 
 export function getLocalExcelDocuments(): ExcelDocument[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_EXCEL_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
+    if (!raw) {
+      if (RECOVERED_SAVED_EXCELS.length > 0) {
+        saveLocalExcelDocuments(RECOVERED_SAVED_EXCELS);
+        return [...RECOVERED_SAVED_EXCELS];
+      }
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      if (RECOVERED_SAVED_EXCELS.length > 0) {
+        saveLocalExcelDocuments(RECOVERED_SAVED_EXCELS);
+        return [...RECOVERED_SAVED_EXCELS];
+      }
+    }
+    return parsed;
   } catch (e) {
     console.error('Error reading local excel documents:', e);
-    return [];
+    return [...RECOVERED_SAVED_EXCELS];
   }
 }
 
@@ -69,6 +83,23 @@ export async function fetchAllExcelDocuments(): Promise<ExcelDocument[]> {
         cloudList.push(docSnap.data() as ExcelDocument);
       });
 
+      // If user cloud excels are empty, seed recovered excels to user's cloud account
+      if (cloudList.length === 0 && RECOVERED_SAVED_EXCELS.length > 0) {
+        for (const rExcel of RECOVERED_SAVED_EXCELS) {
+          try {
+            await setDoc(doc(db, 'excel_documents', rExcel.id), {
+              ...rExcel,
+              userId: auth.currentUser.uid,
+              userEmail: auth.currentUser.email || '',
+              updatedAt: rExcel.metadata?.updatedAt || Date.now(),
+            }, { merge: true });
+            cloudList.push(rExcel);
+          } catch (e) {
+            console.warn('[Firestore] Seed recovered excel failed:', e);
+          }
+        }
+      }
+
       const map = new Map<string, ExcelDocument>();
       cloudList.forEach((d) => map.set(d.id, d));
       localList.forEach((d) => {
@@ -80,15 +111,20 @@ export async function fetchAllExcelDocuments(): Promise<ExcelDocument[]> {
       const merged = Array.from(map.values()).sort(
         (a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0)
       );
-      saveLocalExcelDocuments(merged);
-      return merged;
+      if (merged.length > 0) {
+        saveLocalExcelDocuments(merged);
+        return merged;
+      }
+      return [...RECOVERED_SAVED_EXCELS];
     } catch (error) {
       console.warn('[Firestore] Failed to load cloud excel documents:', error);
-      return localList;
+      return localList.length > 0 ? localList : [...RECOVERED_SAVED_EXCELS];
     }
   }
 
-  return localList.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0));
+  return localList.length > 0
+    ? localList.sort((a, b) => (b.metadata?.updatedAt || 0) - (a.metadata?.updatedAt || 0))
+    : [...RECOVERED_SAVED_EXCELS];
 }
 
 export async function deleteExcelDocument(id: string): Promise<void> {

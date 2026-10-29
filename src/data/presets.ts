@@ -59,6 +59,8 @@ export interface UnifiedPreset {
   iconName: string;
   hasCompanyCustomizer?: boolean;
   companyPlaceholder?: string;
+  isAiRecommended?: boolean;
+  createdAt?: number;
   defaultData: any;
 }
 
