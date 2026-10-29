@@ -30,6 +30,7 @@ import {
   saveLocalAiPresets,
   requestNewAiTemplates,
   clearAiPresets,
+  normalizePreset,
 } from '../services/templateService';
 
 interface TemplateGalleryModalProps {
@@ -112,15 +113,16 @@ export const TemplateGalleryModal: React.FC<TemplateGalleryModalProps> = ({
   const allCombinedPresets: UnifiedPreset[] = [...aiPresets, ...ALL_PRESETS];
 
   const getCustomizedPreset = (preset: UnifiedPreset): UnifiedPreset => {
-    if (!preset.hasCompanyCustomizer) return preset;
+    const base = normalizePreset(preset);
+    if (!base.hasCompanyCustomizer) return base;
 
-    const company = customCompanies[preset.id]?.trim() || '고객사';
+    const company = customCompanies[base.id]?.trim() || '고객사';
     const replaceCompany = (str?: string) => {
       if (!str) return str;
       return str.replace(/\[고객사명\]/g, company);
     };
 
-    const updatedData = { ...preset.defaultData };
+    const updatedData = { ...base.defaultData };
 
     if (updatedData.topic) updatedData.topic = replaceCompany(updatedData.topic);
     if (updatedData.purpose) updatedData.purpose = replaceCompany(updatedData.purpose);
@@ -132,7 +134,7 @@ export const TemplateGalleryModal: React.FC<TemplateGalleryModalProps> = ({
     if (updatedData.keyDetails) updatedData.keyDetails = replaceCompany(updatedData.keyDetails);
 
     return {
-      ...preset,
+      ...base,
       defaultData: updatedData,
     };
   };

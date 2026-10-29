@@ -85,6 +85,8 @@ export const PresentationForm: React.FC<PresentationFormProps> = ({
       setFormData((prev) => ({
         ...prev,
         ...initialData,
+        topic: initialData.topic || (initialData as any).title || prev.topic,
+        purpose: initialData.purpose || (initialData as any).businessDescription || (initialData as any).description || prev.purpose,
       }));
     }
   }, [initialData]);

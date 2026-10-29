@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Layers,
@@ -114,6 +114,30 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
   const [keywords, setKeywords] = useState<string[]>(initialData?.keywords || []);
   const [keywordInput, setKeywordInput] = useState('');
   const [additionalRequirements, setAdditionalRequirements] = useState(initialData?.additionalRequirements || '');
+
+  // Synchronize incoming preset / initialData when changed
+  useEffect(() => {
+    if (initialData) {
+      if (initialData.field) setField(initialData.field);
+      if (initialData.customField !== undefined) setCustomField(initialData.customField);
+      if (initialData.documentType) setDocumentType(initialData.documentType);
+      if (initialData.customDocumentType !== undefined) setCustomDocumentType(initialData.customDocumentType);
+      
+      const resolvedTopic = initialData.topic || (initialData as any).title;
+      if (resolvedTopic !== undefined) setTopic(resolvedTopic);
+      
+      const resolvedPurpose = initialData.purpose || (initialData as any).businessDescription || (initialData as any).description;
+      if (resolvedPurpose !== undefined) setPurpose(resolvedPurpose);
+      
+      const resolvedAudience = initialData.targetAudience || (initialData as any).companyName;
+      if (resolvedAudience !== undefined) setTargetAudience(resolvedAudience);
+      
+      if (initialData.professionalLevel) setProfessionalLevel(initialData.professionalLevel);
+      if (initialData.length) setLength(initialData.length);
+      if (Array.isArray(initialData.keywords)) setKeywords([...initialData.keywords]);
+      if (initialData.additionalRequirements !== undefined) setAdditionalRequirements(initialData.additionalRequirements);
+    }
+  }, [initialData]);
 
   // Quick preset apply
   const applyPreset = (presetId: string) => {

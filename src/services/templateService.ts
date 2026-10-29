@@ -2,12 +2,145 @@ import { UnifiedPreset, ALL_PRESETS } from '../data/presets';
 
 const STORAGE_KEY = 'domain_doc_ai_recommended_presets_v1';
 
+/**
+ * Robust normalization of preset structure and defaultData for all 4 product types.
+ * Ensures that both '폼에 불러오기' and '즉시 생성' always receive complete, valid data.
+ */
+export function normalizePreset(preset: any): UnifiedPreset {
+  if (!preset) {
+    return ALL_PRESETS[0];
+  }
+
+  const rawProduct = String(preset.productType || preset.product || preset.type || 'doc').toLowerCase();
+  let productType: 'doc' | 'presentation' | 'excel' | 'form_studio' = 'doc';
+
+  if (rawProduct.includes('pres') || rawProduct.includes('ppt') || rawProduct.includes('slide')) {
+    productType = 'presentation';
+  } else if (rawProduct.includes('excel') || rawProduct.includes('sheet') || rawProduct.includes('table')) {
+    productType = 'excel';
+  } else if (rawProduct.includes('form') || rawProduct.includes('official') || rawProduct.includes('studio')) {
+    productType = 'form_studio';
+  } else {
+    productType = 'doc';
+  }
+
+  const rawData = preset.defaultData || {};
+  const resolvedTitle =
+    rawData.topic ||
+    rawData.title ||
+    preset.name ||
+    '맞춤 비즈니스 전문 표준 시나리오';
+
+  const resolvedDesc =
+    rawData.purpose ||
+    rawData.businessDescription ||
+    rawData.description ||
+    rawData.keyDetails ||
+    preset.description ||
+    '현업 실무에서 바로 활용 가능한 체계적인 비즈니스 구조화 모델';
+
+  const resolvedTarget =
+    rawData.targetAudience ||
+    rawData.companyName ||
+    rawData.drafterName ||
+    '사내 경영진 및 주요 의사결정권자';
+
+  const resolvedField = rawData.field || preset.field || 'management';
+
+  let normalizedData: any = { ...rawData };
+
+  if (productType === 'doc') {
+    normalizedData = {
+      field: resolvedField,
+      documentType: rawData.documentType || 'proposal',
+      topic: resolvedTitle,
+      title: resolvedTitle,
+      purpose: resolvedDesc,
+      targetAudience: resolvedTarget,
+      professionalLevel: rawData.professionalLevel || 'executive',
+      length: rawData.length || 'standard',
+      keywords: Array.isArray(rawData.keywords) && rawData.keywords.length > 0
+        ? rawData.keywords
+        : ['전략 수립', '실무 실행', 'KPI 달성', '리스크 관리'],
+      additionalRequirements: rawData.additionalRequirements || '',
+    };
+  } else if (productType === 'presentation') {
+    normalizedData = {
+      field: resolvedField,
+      presentationType: rawData.presentationType || 'ir_pitch',
+      theme: rawData.theme || 'dark_navy',
+      topic: resolvedTitle,
+      title: resolvedTitle,
+      purpose: resolvedDesc,
+      targetAudience: resolvedTarget,
+      companyName: rawData.companyName || '',
+      slideCountPreference: Number(rawData.slideCountPreference) || 10,
+      keyPoints: rawData.keyPoints || resolvedDesc || '',
+    };
+  } else if (productType === 'excel') {
+    normalizedData = {
+      templateType: rawData.templateType || 'project_wbs_budget',
+      title: resolvedTitle,
+      topic: resolvedTitle,
+      companyName: rawData.companyName || '전략 기획 총괄팀',
+      period: rawData.period || '2026년 1월 ~ 12월 (연간)',
+      currency: rawData.currency === 'USD' ? 'USD' : 'KRW',
+      businessDescription: resolvedDesc,
+      keyMetricsToInclude:
+        rawData.keyMetricsToInclude ||
+        '월별 목표 대비 달성율(%), 전년 대비 성장률(YoY), 부서별 기여도 및 마진율',
+    };
+  } else if (productType === 'form_studio') {
+    normalizedData = {
+      formType: rawData.formType || 'proposal_approval',
+      title: resolvedTitle,
+      topic: resolvedTitle,
+      drafterName: rawData.drafterName || '홍길동',
+      drafterDepartment: rawData.drafterDepartment || '기획전략팀',
+      drafterPosition: rawData.drafterPosition || '수석 / 팀장',
+      companyName: rawData.companyName || '(주)혁신그룹',
+      recipientName: rawData.recipientName || '대표이사 귀하',
+      recipientCompany: rawData.recipientCompany || '(주)혁신그룹',
+      keyDetails:
+        rawData.keyDetails ||
+        `1. 추진 배경 및 목적:\n- ${resolvedDesc}\n2. 세부 실행 계획 및 일정\n3. 소요 예산 및 정량적 기대효과`,
+      totalBudget: rawData.totalBudget || '15,000,000원',
+      targetDate: rawData.targetDate || '2026년 12월 31일',
+    };
+  }
+
+  return {
+    ...preset,
+    id: preset.id || `preset-ai-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    name: preset.name || resolvedTitle,
+    description: preset.description || resolvedDesc,
+    productType,
+    field: resolvedField,
+    iconName:
+      preset.iconName ||
+      (productType === 'doc'
+        ? 'Megaphone'
+        : productType === 'presentation'
+        ? 'Building2'
+        : productType === 'excel'
+        ? 'Cpu'
+        : 'GraduationCap'),
+    hasCompanyCustomizer:
+      preset.hasCompanyCustomizer !== undefined ? Boolean(preset.hasCompanyCustomizer) : true,
+    companyPlaceholder: preset.companyPlaceholder || '예: 대상 고객사/기업명 입력',
+    isAiRecommended: true,
+    createdAt: preset.createdAt || Date.now(),
+    defaultData: normalizedData,
+  };
+}
+
 export function getLocalAiPresets(): UnifiedPreset[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => normalizePreset(item));
   } catch (err) {
     console.error('Failed to load AI presets from localStorage:', err);
     return [];
@@ -16,7 +149,8 @@ export function getLocalAiPresets(): UnifiedPreset[] {
 
 export function saveLocalAiPresets(presets: UnifiedPreset[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
+    const normalizedList = presets.map((p) => normalizePreset(p));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedList));
   } catch (err) {
     console.error('Failed to save AI presets to localStorage:', err);
   }
@@ -45,7 +179,7 @@ export async function requestNewAiTemplates(existingTitles: string[] = []): Prom
 
     const data = await response.json();
     if (data.success && Array.isArray(data.templates)) {
-      return data.templates;
+      return data.templates.map((tpl: any) => normalizePreset(tpl));
     }
     throw new Error('올바른 템플릿 목록 응답을 수신하지 못했습니다.');
   } catch (error) {

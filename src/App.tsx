@@ -78,6 +78,7 @@ import { calculateAdminDashboardMetrics } from './services/adminAnalyticsService
 import { isUserAdmin } from './constants/adminConfig';
 import { AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { normalizePreset } from './services/templateService';
 
 function MainApp() {
   const { currentUser } = useAuth();
@@ -211,48 +212,41 @@ function MainApp() {
     }
   };
 
-  const handleSelectPreset = (preset: any, autoGenerate: boolean = false) => {
-    const product = preset.productType || 'doc';
+  const handleSelectPreset = async (preset: any, autoGenerate: boolean = false) => {
+    const normalized = normalizePreset(preset);
+    const product = normalized.productType;
+    const data = normalized.defaultData;
+
+    setIsTemplatesOpen(false);
+
     if (product === 'doc') {
-      if (preset.defaultData) {
-        setDocFormData(preset.defaultData);
-        if (autoGenerate && preset.defaultData.topic) {
-          handleGenerateDoc(preset.defaultData as DocumentInputForm);
-          return;
-        }
-      }
+      setDocFormData(data);
       setAppMode('doc_generator');
       setCurrentView('form');
-    } else if (product === 'presentation') {
-      if (preset.defaultData) {
-        setPresFormData(preset.defaultData);
-        if (autoGenerate && preset.defaultData.topic) {
-          handleGeneratePresentation(preset.defaultData as PresentationInputForm);
-          return;
-        }
+      if (autoGenerate) {
+        await handleGenerateDoc(data as DocumentInputForm);
       }
+    } else if (product === 'presentation') {
+      setPresFormData(data);
       setAppMode('presentation_generator');
       setCurrentView('form');
-    } else if (product === 'excel') {
-      if (preset.defaultData) {
-        setExcelFormData(preset.defaultData);
-        if (autoGenerate && preset.defaultData.title) {
-          handleGenerateExcel(preset.defaultData as ExcelInputForm);
-          return;
-        }
+      if (autoGenerate) {
+        await handleGeneratePresentation(data as PresentationInputForm);
       }
+    } else if (product === 'excel') {
+      setExcelFormData(data);
       setAppMode('excel_generator');
       setCurrentView('form');
-    } else if (product === 'form_studio') {
-      if (preset.defaultData) {
-        setFormStudioFormData(preset.defaultData);
-        if (autoGenerate && preset.defaultData.title) {
-          handleGenerateForm(preset.defaultData as BusinessFormInput);
-          return;
-        }
+      if (autoGenerate) {
+        await handleGenerateExcel(data as ExcelInputForm);
       }
+    } else if (product === 'form_studio') {
+      setFormStudioFormData(data);
       setAppMode('form_studio');
       setCurrentView('form');
+      if (autoGenerate) {
+        await handleGenerateForm(data as BusinessFormInput);
+      }
     }
   };
 

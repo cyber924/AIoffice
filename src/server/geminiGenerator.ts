@@ -896,12 +896,31 @@ export async function generateRecommendedPresets(
 
     const parsed = extractJsonFromResponse(rawJson);
     if (Array.isArray(parsed) && parsed.length >= 4) {
-      return parsed.slice(0, 4).map((item: any, idx: number) => ({
-        ...item,
-        id: item.id || `preset-ai-${timestamp}-${idx}`,
-        isAiRecommended: true,
-        createdAt: item.createdAt || timestamp,
-      }));
+      return parsed.slice(0, 4).map((item: any, idx: number) => {
+        const rawData = item.defaultData || {};
+        const titleOrTopic = rawData.topic || rawData.title || item.name || '';
+        const purposeOrDesc =
+          rawData.purpose ||
+          rawData.businessDescription ||
+          rawData.keyDetails ||
+          item.description ||
+          '';
+
+        return {
+          ...item,
+          id: item.id || `preset-ai-${timestamp}-${idx}`,
+          isAiRecommended: true,
+          createdAt: item.createdAt || timestamp,
+          defaultData: {
+            ...rawData,
+            topic: rawData.topic || titleOrTopic,
+            title: rawData.title || titleOrTopic,
+            purpose: rawData.purpose || purposeOrDesc,
+            businessDescription: rawData.businessDescription || purposeOrDesc,
+            keyDetails: rawData.keyDetails || purposeOrDesc,
+          },
+        };
+      });
     }
   } catch (err) {
     console.warn('[Gemini] generateRecommendedPresets failed, returning curated fallback:', err);
