@@ -21,7 +21,9 @@ import {
   Zap,
   RefreshCw,
   Layers,
-  ChevronDown
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MarketItem, MarketProductType, MarketFilterState, MarketSortOption, MarketPriceFilter } from '../../types/market';
@@ -63,6 +65,15 @@ export const MarketHub: React.FC<MarketHubProps> = ({
   const [priceFilter, setPriceFilter] = useState<MarketPriceFilter>('all');
   const [sortBy, setSortBy] = useState<MarketSortOption | 'audit_score'>('latest');
   const [auditOnlyFilter, setAuditOnlyFilter] = useState(false);
+
+  // Pagination (12 items per page)
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
+
+  // Reset to page 1 whenever any filter or search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, productTypeFilter, categoryFilter, priceFilter, sortBy, auditOnlyFilter]);
 
   const fetchItems = async () => {
     setIsLoading(true);
@@ -141,6 +152,13 @@ export const MarketHub: React.FC<MarketHubProps> = ({
       if (sortBy === 'staff_pick') return (b.isStaffPick ? 1 : 0) - (a.isStaffPick ? 1 : 0);
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
+
+  // Pagination calculation (12 items per page)
+  const totalItems = filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (validCurrentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedItems = filteredItems.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   // Top 3 popular items for Realtime Ranking
   const topRankingItems = [...items]
@@ -436,125 +454,192 @@ export const MarketHub: React.FC<MarketHubProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredItems.map((item) => {
-              const formatLabel =
-                item.productType === 'presentation'
-                  ? 'PPT (.pptx)'
-                  : item.productType === 'excel'
-                  ? '엑셀 (.xlsx)'
-                  : item.productType === 'form_studio'
-                  ? '공문서 (.docx)'
-                  : 'Word (.docx)';
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {paginatedItems.map((item) => {
+                const formatLabel =
+                  item.productType === 'presentation'
+                    ? 'PPT (.pptx)'
+                    : item.productType === 'excel'
+                    ? '엑셀 (.xlsx)'
+                    : item.productType === 'form_studio'
+                    ? '공문서 (.docx)'
+                    : 'Word (.docx)';
 
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => handleSelectDoc(item)}
-                  className="group rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500/80 transition-all shadow-lg hover:shadow-indigo-600/10 cursor-pointer flex flex-col justify-between overflow-hidden relative"
-                >
-                  {/* Card Visual Header / Gradient */}
+                return (
                   <div
-                    className={`h-28 bg-gradient-to-r ${
-                      item.coverGradient || 'from-indigo-600 to-purple-700'
-                    } p-4 flex flex-col justify-between relative overflow-hidden`}
+                    key={item.id}
+                    onClick={() => handleSelectDoc(item)}
+                    className="group rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500/80 transition-all shadow-lg hover:shadow-indigo-600/10 cursor-pointer flex flex-col justify-between overflow-hidden relative"
                   >
-                    <div className="absolute inset-0 bg-black/20" />
-                    <div className="flex items-center justify-between relative z-10">
-                      <span className="px-2 py-0.5 rounded-md bg-black/40 backdrop-blur-sm text-white text-[10px] font-extrabold uppercase tracking-wider">
-                        {formatLabel}
-                      </span>
-
-                      <div className="flex items-center gap-1.5">
-                        {item.isStaffPick && (
-                          <span className="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black flex items-center gap-0.5 shadow-sm">
-                            <Award className="w-3 h-3" />
-                            PICK
-                          </span>
-                        )}
-                        <span
-                          className={`px-2.5 py-0.5 rounded-md text-[11px] font-black shadow-sm ${
-                            item.isFree
-                              ? 'bg-emerald-400 text-slate-950'
-                              : 'bg-indigo-400 text-slate-950'
-                          }`}
-                        >
-                          {item.isFree ? '0원 (무료)' : '1,000원'}
+                    {/* Card Visual Header / Gradient */}
+                    <div
+                      className={`h-28 bg-gradient-to-r ${
+                        item.coverGradient || 'from-indigo-600 to-purple-700'
+                      } p-4 flex flex-col justify-between relative overflow-hidden`}
+                    >
+                      <div className="absolute inset-0 bg-black/20" />
+                      <div className="flex items-center justify-between relative z-10">
+                        <span className="px-2 py-0.5 rounded-md bg-black/40 backdrop-blur-sm text-white text-[10px] font-extrabold uppercase tracking-wider">
+                          {formatLabel}
                         </span>
+
+                        <div className="flex items-center gap-1.5">
+                          {item.isStaffPick && (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black flex items-center gap-0.5 shadow-sm">
+                              <Award className="w-3 h-3" />
+                              PICK
+                            </span>
+                          )}
+                          <span
+                            className={`px-2.5 py-0.5 rounded-md text-[11px] font-black shadow-sm ${
+                              item.isFree
+                                ? 'bg-emerald-400 text-slate-950'
+                                : 'bg-indigo-400 text-slate-950'
+                            }`}
+                          >
+                            {item.isFree ? '0원 (무료)' : '1,000원'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between relative z-10">
+                        <div className="text-[11px] text-white/90 font-medium truncate">
+                          {MARKET_CATEGORIES.find((c) => c.id === item.category)?.name || '비즈니스'}
+                        </div>
+                        {item.isAudited && typeof item.auditScore === 'number' && (
+                          <div
+                            className="px-2 py-0.5 rounded-md bg-slate-950/80 backdrop-blur-sm text-amber-300 text-[10px] font-black flex items-center gap-1 border border-amber-400/30 shadow-xs"
+                            title="AI 4대 실무품질 검수 완료"
+                          >
+                            <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                            <span>AI {item.auditScore}점</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between relative z-10">
-                      <div className="text-[11px] text-white/90 font-medium truncate">
-                        {MARKET_CATEGORIES.find((c) => c.id === item.category)?.name || '비즈니스'}
+                    {/* Card Body */}
+                    <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                      <div className="space-y-2">
+                        <h3 className="font-extrabold text-base text-white group-hover:text-indigo-300 transition-colors line-clamp-2">
+                          {item.title}
+                        </h3>
+                        <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                          {item.summary}
+                        </p>
                       </div>
-                      {item.isAudited && typeof item.auditScore === 'number' && (
-                        <div
-                          className="px-2 py-0.5 rounded-md bg-slate-950/80 backdrop-blur-sm text-amber-300 text-[10px] font-black flex items-center gap-1 border border-amber-400/30 shadow-xs"
-                          title="AI 4대 실무품질 검수 완료"
-                        >
-                          <Sparkles className="w-2.5 h-2.5 text-amber-300" />
-                          <span>AI {item.auditScore}점</span>
+
+                      {/* Tags */}
+                      {item.tags && item.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {item.tags.slice(0, 3).map((tag) => (
+                            <span
+                              key={tag}
+                              className="px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 text-[10px] font-medium"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
                         </div>
                       )}
-                    </div>
-                  </div>
 
-                  {/* Card Body */}
-                  <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                    <div className="space-y-2">
-                      <h3 className="font-extrabold text-base text-white group-hover:text-indigo-300 transition-colors line-clamp-2">
-                        {item.title}
-                      </h3>
-                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                        {item.summary}
-                      </p>
-                    </div>
-
-                    {/* Tags */}
-                    {item.tags && item.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {item.tags.slice(0, 3).map((tag) => (
-                          <span
-                            key={tag}
-                            className="px-2 py-0.5 rounded-md bg-slate-950 text-slate-400 text-[10px] font-medium"
-                          >
-                            #{tag}
+                      {/* Card Footer: Author & Counts */}
+                      <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-full bg-indigo-600/80 flex items-center justify-center font-bold text-[10px] text-white">
+                            {item.authorName.charAt(0)}
+                          </div>
+                          <span className="truncate max-w-[100px] font-medium text-slate-300">
+                            {item.authorName}
                           </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Card Footer: Author & Counts */}
-                    <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-5 h-5 rounded-full bg-indigo-600/80 flex items-center justify-center font-bold text-[10px] text-white">
-                          {item.authorName.charAt(0)}
                         </div>
-                        <span className="truncate max-w-[100px] font-medium text-slate-300">
-                          {item.authorName}
-                        </span>
-                      </div>
 
-                      <div className="flex items-center gap-2.5">
-                        <span className="flex items-center gap-0.5">
-                          <Eye className="w-3 h-3 text-slate-500" />
-                          {item.viewCount}
-                        </span>
-                        <span className="flex items-center gap-0.5">
-                          <Download className="w-3 h-3 text-slate-500" />
-                          {item.downloadCount}
-                        </span>
-                        <span className="flex items-center gap-0.5">
-                          <Heart className="w-3 h-3 text-rose-400" />
-                          {item.likeCount}
-                        </span>
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex items-center gap-0.5">
+                            <Eye className="w-3 h-3 text-slate-500" />
+                            {item.viewCount}
+                          </span>
+                          <span className="flex items-center gap-0.5">
+                            <Download className="w-3 h-3 text-slate-500" />
+                            {item.downloadCount}
+                          </span>
+                          <span className="flex items-center gap-0.5">
+                            <Heart className="w-3 h-3 text-rose-400" />
+                            {item.likeCount}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+
+            {/* Pagination Controls Bar (12 items per page) */}
+            {totalPages > 1 && (
+              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+                <span className="font-medium text-slate-400 text-center sm:text-left">
+                  총 <strong className="text-indigo-400 font-bold">{totalItems}개</strong> 문서 중{' '}
+                  <span className="text-slate-200 font-semibold">{startIndex + 1} - {Math.min(startIndex + ITEMS_PER_PAGE, totalItems)}번째</span> (페이지{' '}
+                  <strong className="text-white">{validCurrentPage}</strong> / {totalPages})
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((p) => Math.max(1, p - 1));
+                      window.scrollTo({ top: 380, behavior: 'smooth' });
+                    }}
+                    disabled={validCurrentPage === 1}
+                    className={`p-2 rounded-xl border transition-all ${
+                      validCurrentPage === 1
+                        ? 'border-slate-800 text-slate-600 cursor-not-allowed bg-slate-950'
+                        : 'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer'
+                    }`}
+                    title="이전 12개 보기"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => {
+                        setCurrentPage(page);
+                        window.scrollTo({ top: 380, behavior: 'smooth' });
+                      }}
+                      className={`w-8 h-8 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        page === validCurrentPage
+                          ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/30'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((p) => Math.min(totalPages, p + 1));
+                      window.scrollTo({ top: 380, behavior: 'smooth' });
+                    }}
+                    disabled={validCurrentPage === totalPages}
+                    className={`p-2 rounded-xl border transition-all ${
+                      validCurrentPage === totalPages
+                        ? 'border-slate-800 text-slate-600 cursor-not-allowed bg-slate-950'
+                        : 'border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer'
+                    }`}
+                    title="다음 12개 보기"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
         )}
       </main>
