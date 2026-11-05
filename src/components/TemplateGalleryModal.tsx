@@ -29,6 +29,7 @@ import {
   getLocalAiPresets,
   saveLocalAiPresets,
   requestNewAiTemplates,
+  getSampleFallbackPresets,
   clearAiPresets,
   normalizePreset,
 } from '../services/templateService';
@@ -177,10 +178,20 @@ export const TemplateGalleryModal: React.FC<TemplateGalleryModalProps> = ({
       }
     } catch (err: any) {
       console.error('Error generating AI templates:', err);
-      setNoticeMessage('템플릿 생성 중 일시적인 문제가 발생했습니다. 기본 추천 템플릿 풀로 안전하게 보강되었습니다.');
+      setNoticeMessage(`⚠️ 템플릿 생성 실패: ${err.message || 'AI 서버 응답 오류가 발생했습니다.'}`);
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  // Explicitly load offline/sample presets when requested
+  const handleLoadSamplePresets = () => {
+    const samples = getSampleFallbackPresets();
+    const updatedAiList = [...samples, ...aiPresets];
+    setAiPresets(updatedAiList);
+    saveLocalAiPresets(updatedAiList);
+    setCurrentPage(1);
+    setNoticeMessage('📋 [샘플] 표준 템플릿 4종이 성공적으로 로드되었습니다.');
   };
 
   // Reset to original 15 presets
@@ -300,18 +311,39 @@ export const TemplateGalleryModal: React.FC<TemplateGalleryModalProps> = ({
 
         {/* Notice Message Banner */}
         {noticeMessage && (
-          <div className="px-5 py-2 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-indigo-100 flex items-center justify-between text-xs text-indigo-900 font-semibold animate-in slide-in-from-top-1">
+          <div
+            className={`px-5 py-2.5 border-b flex items-center justify-between text-xs font-semibold animate-in slide-in-from-top-1 ${
+              noticeMessage.startsWith('⚠️')
+                ? 'bg-amber-50 border-amber-200 text-amber-900'
+                : 'bg-gradient-to-r from-purple-50 to-indigo-50 border-indigo-100 text-indigo-900'
+            }`}
+          >
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-600 shrink-0" />
+              {noticeMessage.startsWith('⚠️') ? (
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              ) : (
+                <Sparkles className="w-4 h-4 text-purple-600 shrink-0" />
+              )}
               <span>{noticeMessage}</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setNoticeMessage(null)}
-              className="text-slate-400 hover:text-slate-700 cursor-pointer"
-            >
-              &times;
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {noticeMessage.startsWith('⚠️') && (
+                <button
+                  type="button"
+                  onClick={handleLoadSamplePresets}
+                  className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-200 hover:bg-amber-300 text-amber-900 transition-colors cursor-pointer"
+                >
+                  샘플 서식 4종 불러오기
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setNoticeMessage(null)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer text-base leading-none px-1"
+              >
+                &times;
+              </button>
+            </div>
           </div>
         )}
 

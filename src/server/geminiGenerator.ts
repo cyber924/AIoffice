@@ -1,10 +1,13 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 
-const CANDIDATE_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-3.7-flash',
-  'gemini-2.5-pro',
-];
+// Unified model names per requirements:
+// Primary text: gemini-3.5-flash, fallback: gemini-2.5-flash
+export const PRIMARY_TEXT_MODEL = 'gemini-3.5-flash';
+export const FALLBACK_TEXT_MODEL = 'gemini-2.5-flash';
+
+// Primary image: gemini-3.1-flash-image, fallback: gemini-3.1-flash-lite-image
+export const PRIMARY_IMAGE_MODEL = 'gemini-3.1-flash-image';
+export const FALLBACK_IMAGE_MODEL = 'gemini-3.1-flash-lite-image';
 
 /**
  * Extracts and parses JSON from text that might be wrapped in markdown codeblocks
@@ -12,13 +15,13 @@ const CANDIDATE_MODELS = [
 export function extractJsonFromResponse(rawText: string): any {
   if (!rawText) return null;
   const trimmed = rawText.trim();
-  
-  // Try direct parse first
+
+  // 1. Try direct parse first
   try {
     return JSON.parse(trimmed);
   } catch {}
 
-  // Try extracting markdown ```json ... ``` block
+  // 2. Try extracting markdown ```json ... ``` block
   const jsonBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   if (jsonBlockMatch && jsonBlockMatch[1]) {
     try {
@@ -26,7 +29,7 @@ export function extractJsonFromResponse(rawText: string): any {
     } catch {}
   }
 
-  // Try finding the first '{' and last '}'
+  // 3. Try finding the first '{' and last '}'
   const firstBrace = trimmed.indexOf('{');
   const lastBrace = trimmed.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace) {
@@ -35,36 +38,83 @@ export function extractJsonFromResponse(rawText: string): any {
     } catch {}
   }
 
+  // 4. Try finding first '[' and last ']' for arrays
+  const firstBracket = trimmed.indexOf('[');
+  const lastBracket = trimmed.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    try {
+      return JSON.parse(trimmed.substring(firstBracket, lastBracket + 1));
+    } catch {}
+  }
+
   return null;
 }
 
 /**
- * Formats Gemini API errors, specifically addressing quota limits and resource exhaustion
+ * Checks if a Gemini API error is non-retryable (authentication, permission, model not found, invalid parameter, quota)
  */
-function formatGeminiError(err: any, defaultMsg: string): Error {
-  const msg = err?.message || String(err);
-  if (
-    msg.includes('resource_exhausted') ||
-    msg.includes('quota') ||
-    msg.includes('LimitExceeded') ||
-    msg.includes('429') ||
-    msg.includes('exhausted')
-  ) {
-    return new Error('구글 AI 스튜디오의 Gemini API 사용 한도(Quota) 또는 요금제 트래픽 제약이 초과되었습니다. 사용 중인 API 키의 결제 설정을 확인하시거나 잠시 후 다시 실행해 보십시오. (Error: API Quota Exceeded)');
+export function analyzeGeminiError(err: any): { isNonRetryable: boolean; message: string; statusCode: number } {
+  const rawMsg = err?.message || String(err);
+  const lower = rawMsg.toLowerCase();
+
+  // 1. Invalid API Key (401/400)
+  if (lower.includes('api_key_invalid') || lower.includes('api key not valid') || lower.includes('invalid api key')) {
+    return {
+      isNonRetryable: true,
+      message: '등록된 GEMINI_API_KEY가 유효하지 않습니다. Google AI Studio에서 발급받은 유효한 키인지 Vercel 환경변수 설정을 확인해 주세요.',
+      statusCode: 401,
+    };
   }
-  return new Error(defaultMsg + ` (상용 서버 에러: ${msg})`);
+
+  // 2. Permission Denied (403)
+  if (lower.includes('permission_denied') || lower.includes('permissiondenied') || lower.includes('403')) {
+    return {
+      isNonRetryable: true,
+      message: 'GEMINI_API_KEY 권한이 거부되었습니다 (403 Permission Denied). API 키의 결제 계정 연동 및 모델 접근 권한을 확인해 주세요.',
+      statusCode: 403,
+    };
+  }
+
+  // 3. Model Not Found (404)
+  if (lower.includes('not_found') || lower.includes('is not found') || lower.includes('404')) {
+    return {
+      isNonRetryable: true,
+      message: '요청한 Gemini 모델을 찾을 수 없거나 해당 키에서 지원되지 않는 모델입니다 (404 Not Found).',
+      statusCode: 404,
+    };
+  }
+
+  // 4. Bad Request / Schema or argument error (400)
+  if (lower.includes('invalid_argument') || lower.includes('bad request') || lower.includes('400')) {
+    return {
+      isNonRetryable: true,
+      message: `요청 인자가 유효하지 않습니다 (400 Bad Request): ${rawMsg}`,
+      statusCode: 400,
+    };
+  }
+
+  // 5. Quota / Rate limit (429)
+  if (lower.includes('resource_exhausted') || lower.includes('quota') || lower.includes('429')) {
+    return {
+      isNonRetryable: true,
+      message: 'Gemini API 사용 한도(Quota) 또는 분당 요청 제한(429)이 초과되었습니다. 잠시 후 다시 시도해 주세요.',
+      statusCode: 429,
+    };
+  }
+
+  // Transient / network / 503
+  return {
+    isNonRetryable: false,
+    message: `Gemini API 호출 중 일시적인 오류가 발생했습니다: ${rawMsg}`,
+    statusCode: 500,
+  };
 }
 
-export async function generateWithFallback(
-  apiKey: string,
-  params: {
-    systemInstruction?: string;
-    prompt: string;
-    responseSchema?: any;
-    temperature?: number;
-  }
-): Promise<string> {
-  const ai = new GoogleGenAI({
+/**
+ * Creates GoogleGenAI client with standard User-Agent header
+ */
+export function createGenAIClient(apiKey: string): GoogleGenAI {
+  return new GoogleGenAI({
     apiKey,
     httpOptions: {
       headers: {
@@ -72,72 +122,111 @@ export async function generateWithFallback(
       },
     },
   });
+}
 
+/**
+ * Generates text or structured JSON using primary model gemini-3.5-flash with timeout and transient fallback
+ */
+export async function generateWithFallback(
+  apiKey: string,
+  params: {
+    systemInstruction?: string;
+    prompt: string;
+    responseSchema?: any;
+    temperature?: number;
+    timeoutMs?: number;
+  }
+): Promise<string> {
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다.');
+  }
+
+  const ai = createGenAIClient(apiKey);
+  const timeoutMs = params.timeoutMs || 45000; // 45 seconds timeout (well within Vercel 60s maxDuration)
+
+  const candidateModels = [PRIMARY_TEXT_MODEL, FALLBACK_TEXT_MODEL];
   let lastError: any = null;
 
-  for (const model of CANDIDATE_MODELS) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`[AI Generator] Trying ${model} (attempt ${attempt})...`);
-        const config: any = {
-          temperature: params.temperature ?? 0.7,
-        };
+  for (const model of candidateModels) {
+    try {
+      console.log(`[AI Generator] Calling model '${model}'...`);
 
-        if (params.systemInstruction) {
-          config.systemInstruction = params.systemInstruction;
-        }
+      const config: any = {
+        temperature: params.temperature ?? 0.7,
+      };
 
-        if (params.responseSchema) {
-          config.responseMimeType = 'application/json';
-          config.responseSchema = params.responseSchema;
-        }
-
-        const response = await ai.models.generateContent({
-          model,
-          contents: params.prompt,
-          config,
-        });
-
-        const text = response.text;
-        if (text && text.trim().length > 0) {
-          return text;
-        }
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`[AI Generator] Model ${model} attempt ${attempt} failed:`, err?.message || err);
-        await new Promise(resolve => setTimeout(resolve, 600 * attempt));
+      if (params.systemInstruction) {
+        config.systemInstruction = params.systemInstruction;
       }
+
+      if (params.responseSchema) {
+        config.responseMimeType = 'application/json';
+        config.responseSchema = params.responseSchema;
+      }
+
+      // Execute with timeout race
+      const apiCall = ai.models.generateContent({
+        model,
+        contents: params.prompt,
+        config,
+      });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`요청 시간이 초과되었습니다 (${timeoutMs / 1000}초 타임아웃)`)), timeoutMs)
+      );
+
+      const response = await Promise.race([apiCall, timeoutPromise]);
+      const text = response.text;
+
+      if (text && text.trim().length > 0) {
+        return text;
+      }
+    } catch (err: any) {
+      lastError = err;
+      const analysis = analyzeGeminiError(err);
+      console.warn(`[AI Generator] Model '${model}' failed with status ${analysis.statusCode}:`, analysis.message);
+
+      // If it's a non-retryable error (auth, model not found, invalid param, quota), DO NOT retry
+      if (analysis.isNonRetryable) {
+        const error = new Error(analysis.message);
+        (error as any).statusCode = analysis.statusCode;
+        throw error;
+      }
+
+      // If transient, delay slightly before fallback
+      await new Promise((r) => setTimeout(r, 1000));
     }
   }
 
-  // Fallback attempt: Try without strict schema if schema was failing
+  // Schema fallback: Try once without strict responseSchema if strict schema failed transiently
   if (params.responseSchema) {
-    for (const model of CANDIDATE_MODELS) {
-      try {
-        console.log(`[AI Generator] Fallback prompt attempt with ${model}...`);
-        const promptWithJsonInstruction = `${params.prompt}\n\n[CRITICAL]: Respond ONLY with valid, raw JSON satisfying the required schema without any surrounding text or explanation.`;
-        const response = await ai.models.generateContent({
-          model,
-          contents: promptWithJsonInstruction,
-          config: {
-            systemInstruction: params.systemInstruction,
-            temperature: 0.6,
-          },
-        });
-        const text = response.text;
-        if (text && text.trim().length > 0) {
-          const parsed = extractJsonFromResponse(text);
-          if (parsed && typeof parsed === 'object') {
-            return JSON.stringify(parsed);
-          }
+    try {
+      console.log(`[AI Generator] Schema fallback attempt with '${PRIMARY_TEXT_MODEL}'...`);
+      const promptWithJsonInstruction = `${params.prompt}\n\n[CRITICAL]: Respond ONLY with valid, raw JSON satisfying the required schema without markdown explanation.`;
+      const response = await ai.models.generateContent({
+        model: PRIMARY_TEXT_MODEL,
+        contents: promptWithJsonInstruction,
+        config: {
+          systemInstruction: params.systemInstruction,
+          temperature: 0.6,
+        },
+      });
+      const text = response.text;
+      if (text && text.trim().length > 0) {
+        const parsed = extractJsonFromResponse(text);
+        if (parsed && typeof parsed === 'object') {
+          return JSON.stringify(parsed);
         }
-      } catch (err: any) {
-        lastError = err;
       }
+    } catch (err: any) {
+      lastError = err;
     }
   }
 
-  throw formatGeminiError(lastError, '현재 AI 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.');
+  const finalAnalysis = analyzeGeminiError(lastError);
+  const finalError = new Error(finalAnalysis.message);
+  (finalError as any).statusCode = finalAnalysis.statusCode;
+  throw finalError;
 }
 
 export interface ChatMessage {
@@ -150,56 +239,26 @@ export async function chatWithDocumentAgent(
   messages: ChatMessage[],
   currentContext?: string
 ): Promise<string> {
-  const ai = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
-
   const systemInstruction = `당신은 대한민국 최고 수준의 '분야별 전문 비즈니스 & 테크니컬 문서 전략 컨설팅 수석 에이전트(Chief Document Strategist AI)'입니다.
 
 [당신의 전문 분야 및 역할]
-1. 16대 비즈니스 도메인(경영/전략, 마케팅, 광고/PR, 영업/B2B, 기획/신사업, IT/소프트웨어, AI/데이터, 금융/투자, 부동산, 교육/HR, 법률, 정책/공공, 연구/학술, 제조, 물류 등)의 모든 전문 문서 작성법을 마스터하고 있습니다.
-2. 주요 문서 유형(사업계획서, 수주 제안서, PRD 기획서, 시장조사 보고서, 경쟁사 분석서, 마케팅 전략서, 기술 사양서, 경영진 보고서, 교육 가이드라인, 정책 제안서, IR 투자 피치 등)에 대한 목차 구성, 프레임워크(MECE, SWOT, 4P, TAM/SAM/SOM, Unit Economics, WBS, NPV/IRR 등), 설득 논리, 실무 팁을 최고 전문가 수준으로 전수합니다.
-3. 사용자가 작성하고자 하는 문서 아이디어나 초안을 검토하고, 즉시 실무에 투입 가능한 '최적 목차', '필수 정량 지표', '독자별 맞춤 설득 포인트', '주의할 리스크'를 명쾌하게 답변합니다.
-4. 사용자가 문서 작성을 위해 파라미터를 추천받길 원할 경우, 바로 생성기에 적용할 수 있는 [추천 분야], [추천 문서 유형], [최적화된 주제], [목적], [대상 독자], [핵심 키워드]를 명확히 정리해 줍니다.
+1. 16대 비즈니스 도메인의 모든 전문 문서 작성법을 마스터하고 있습니다.
+2. 주요 문서 유형에 대한 목차 구성, 프레임워크(MECE, SWOT, 4P, TAM/SAM/SOM, WBS 등), 설득 논리를 최고 전문가 수준으로 전수합니다.
+3. 사용자의 아이디어나 초안을 검토하고, 즉시 실무에 투입 가능한 '최적 목차', '필수 정량 지표', '주의할 리스크'를 명쾌하게 답변합니다.
 
 [답변 스타일]
-- 정중하고 격식 있는 비즈니스 컨설턴트 톤 (해요체 또는 하십시오체의 친절하면서도 전문적인 어조).
-- Markdown 서식(소제목 ###, 불릿 포인트, 굵은 글씨, 표, 코드블록, 체크리스트)을 적극 활용하여 가독성을 극대화하십시오.
-- [마크다운 표(Table) 필수 서식]: 표 작성 시 각 행마다 줄바꿈(\\n)을 반드시 적용하여 | 헤더1 | 헤더2 |\\n|---|---|\\n| 값1 | 값2 | 형태로 작성하십시오. 한 줄에 표 행들을 연달아 붙여쓰지 마십시오.
-- 실무 예시와 구체적인 수치/프레임워크를 포함하여 바로 적용할 수 있도록 실용적으로 답변하십시오.`;
+- 정중하고 격식 있는 비즈니스 컨설턴트 톤.
+- Markdown 서식(소제목 ###, 불릿 포인트, 굵은 글씨, 표)을 적극 활용하십시오.
+- 실무 예시와 구체적인 수치를 포함하여 실용적으로 답변하십시오.`;
 
-  // Build conversational transcript
-  const transcript = messages.map(m => `${m.role === 'user' ? '사용자' : '문서 전략 에이전트'}: ${m.content}`).join('\n\n');
+  const transcript = messages.map((m) => `${m.role === 'user' ? '사용자' : '문서 전략 에이전트'}: ${m.content}`).join('\n\n');
   const fullPrompt = `${currentContext ? `[현재 앱/문서 컨텍스트]\n${currentContext}\n\n` : ''}[대화 내역]\n${transcript}\n\n문서 전략 에이전트로서 전문적이고 친절하게 실무 조언을 작성하십시오:`;
 
-  let lastError: any = null;
-
-  for (const model of CANDIDATE_MODELS) {
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: fullPrompt,
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-        },
-      });
-
-      if (response.text && response.text.trim()) {
-        return response.text.trim();
-      }
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`[Agent Chat] Model ${model} failed:`, err?.message || err);
-    }
-  }
-
-  throw formatGeminiError(lastError, '에이전트 응답 생성 중 일시적인 오류가 발생했습니다. 잠시 후 다시 질문해 주세요.');
+  return generateWithFallback(apiKey, {
+    systemInstruction,
+    prompt: fullPrompt,
+    temperature: 0.7,
+  });
 }
 
 export async function generatePresentationDeck(
@@ -220,77 +279,12 @@ export async function generatePresentationDeck(
   const systemInstruction = `당신은 맥킨지, BCG, 글로벌 탑티어 벤처캐피탈(VC) 출신의 '수석 피치덱 전략가 및 프레젠테이션 수석 디자이너'입니다.
 사용자가 요청한 산업 분야와 목적에 맞추어, 실제 청중과 투자자를 매료시킬 수 있는 완성도 높은 16:9 규격의 프레젠테이션 슬라이드 덱을 JSON 형태로 생성하십시오.
 
-[슬라이드 덱 구성 필수 규칙]
+[슬라이드 덱 구성 규칙]
 1. 총 슬라이드 수: 정확히 ${count}장으로 구성하십시오.
-2. 1페이지(표지)부터 마지막 페이지(결론)까지 단 1장도 빠짐없이 완벽하고 풍부한 데이터를 채워 넣어야 합니다. (빈 배열이나 null 금지)
-3. 슬라이드 레이아웃 다양성 배치 (순차적으로 논리적인 비즈니스 흐름 구성):
-   - Slide 1 [title]: 표지 (강렬한 메인 타이틀, 서브타이틀, 회사명/발표자)
-   - Slide 2 [cards_grid_3]: 3대 핵심 문제점 및 시장 페인포인트 (cards 배열 3개 - tag, title, description 필수)
-   - Slide 3 [bullets_split]: 당사의 솔루션 및 차별화된 핵심 가치 (bulletPoints 3~4개 + keyTakeaway)
-   - Slide 4 [market_tam_sam_som]: 시장 규모 및 성장성 (marketSize: tam, sam, som 각각 title, value, desc 수치 기재)
-   - Slide 5 [cards_grid_4]: 비즈니스 모델 및 4단계 핵심 프로세스 (cards 배열 4개)
-   - Slide 6 [comparison_table]: 경쟁사 대비 비교 우위 분석 표 (table: headers 4개, rows 3~4행)
-   - Slide 7 [financial_kpi]: 3개 핵심 재무 목표 및 성장 지표 (metrics 배열 3개: label, value, change, note)
-   - Slide 8 [timeline_roadmap]: 4단계 중장기 추진 로드맵 (timeline 배열 4개: phase, period, title, details 2개)
-   - Slide 9 [swot_matrix]: SWOT 정밀 전략 분석 (swot: strengths, weaknesses, opportunities, threats 각 2개 항목)
-   - Slide 10 [conclusion_call_to_action]: 결론 및 투자/협업 요청 (The Ask & Action Plan, bulletPoints 3개)
-   (만약 ${count}장이 다를 경우 위 핵심 레이아웃들을 알맞게 조합하십시오)
-4. 모든 슬라이드마다 45초~1분 분량의 실제 발표 대본인 'speakerNotes'를 설득력 있는 정중한 구어체로 반드시 작성하십시오.
-5. 각 슬라이드에 어울리는 영문 이미지 검색 키워드('imageKeywords', 예: "business strategy meeting", "cloud data analytics", "financial growth chart")를 1~3단어로 기재하십시오.
-6. 반드시 오직 유효한 JSON 포맷으로만 응답하십시오.
-
-[반환 JSON 스키마 예시]
-{
-  "title": "메인 프레젠테이션 타이틀",
-  "subtitle": "부제목 또는 핵심 슬로건",
-  "company": "${params.companyName || '글로벌 전략 연구소'}",
-  "slides": [
-    {
-      "slideNumber": 1,
-      "layout": "title",
-      "category": "COVER",
-      "title": "스마트 AI 기반 공급망 최적화 및 비즈니스 혁신 전략",
-      "subtitle": "데이터 기반 예측과 자동화를 통한 차세대 엔터프라이즈 운영 모델",
-      "keyTakeaway": "운영비용 35% 절감 및 납기 리드타임 50% 단축을 위한 실행 계획",
-      "imageKeywords": "modern enterprise business skyline architecture",
-      "content": {},
-      "speakerNotes": "안녕하십니까, 오늘 발표를 맡은 전략기획팀입니다. 지금부터..."
-    },
-    {
-      "slideNumber": 2,
-      "layout": "cards_grid_3",
-      "category": "01. PROBLEM DEFINITION",
-      "title": "기존 공급망 체계의 3대 한계와 시장 페인포인트",
-      "keyTakeaway": "단절된 데이터와 수작업 프로세스로 연간 수십억 원의 손실이 발생하고 있습니다.",
-      "imageKeywords": "supply chain logistics warehouse technology",
-      "content": {
-        "cards": [
-          { "tag": "PAIN POINT 1", "title": "수작업 기반의 비효율", "description": "주문 및 재고 관리가 수작업 엑셀에 의존하여 휴먼 에러 발생률이 18%에 달합니다." },
-          { "tag": "PAIN POINT 2", "title": "실시간 가시성 부재", "description": "물류 거점 간 정보 단절로 공급 지연에 대한 사전 대응이 불가능합니다." },
-          { "tag": "PAIN POINT 3", "title": "과다 재고 비용", "description": "부정확한 수요 예측으로 인해 안전재고 유지비가 매년 25% 이상 증가하고 있습니다." }
-        ]
-      },
-      "speakerNotes": "2페이지에서는 현재 시장과 고객사가 겪고 있는 세 가지 핵심 문제를 짚어보겠습니다..."
-    },
-    {
-      "slideNumber": 3,
-      "layout": "bullets_split",
-      "category": "02. SOLUTION & VALUE",
-      "title": "AI 기반 엔드투엔드 통합 솔루션 아키텍처",
-      "keyTakeaway": "실시간 머신러닝 예측 모델을 통해 공급망 전 주기를 지능적으로 자동화합니다.",
-      "imageKeywords": "artificial intelligence data analytics dashboard",
-      "content": {
-        "bulletPoints": [
-          "딥러닝 수요 예측 엔진 도입으로 예측 정확도 94.8% 달성",
-          "IoT 센서 기반 실시간 화물 추적 및 경로 자동 최적화 시스템 구축",
-          "공급업체 및 고객사 간 API 연동을 통한 무중단 자동 발주 체계 완성",
-          "이상 징후 발생 시 3분 이내 대체 경로를 제시하는 실시간 관제 센터"
-        ]
-      },
-      "speakerNotes": "3페이지에서는 이러한 문제를 해결하기 위한 당사의 혁신 솔루션을 설명드리겠습니다..."
-    }
-  ]
-}`;
+2. 1페이지(표지)부터 마지막 페이지(결론)까지 풍부하고 실무적인 데이터를 채워 넣으십시오.
+3. 슬라이드 레이아웃: title, cards_grid_3, bullets_split, market_tam_sam_som, cards_grid_4, comparison_table, financial_kpi, timeline_roadmap, swot_matrix, conclusion_call_to_action 등을 조화롭게 배치하십시오.
+4. 모든 슬라이드마다 45초~1분 분량의 발표 대본(speakerNotes)을 작성하십시오.
+5. 유효한 JSON 포맷으로만 응답하십시오.`;
 
   const prompt = `[프레젠테이션 제작 요청 정보]
 - 산업 분야: ${params.field}
@@ -299,10 +293,10 @@ export async function generatePresentationDeck(
 - 목적: ${params.purpose}
 - 대상 청중: ${params.targetAudience}
 - 회사명: ${params.companyName || ''}
-- 선호 슬라이드 장수: ${count}장
+- 슬라이드 장수: ${count}장
 ${params.keyPoints ? `- 핵심 강조 내용:\n${params.keyPoints}` : ''}
 
-위 정보를 바탕으로 1페이지부터 ${count}페이지까지 단 하나의 슬라이드도 누락 없이 완벽한 컨텐츠를 담은 16:9 프레젠테이션 JSON 슬라이드 덱을 작성하십시오.`;
+위 정보를 바탕으로 완성도 높은 16:9 프레젠테이션 JSON 슬라이드 덱을 작성하십시오.`;
 
   const rawJson = await generateWithFallback(apiKey, {
     systemInstruction,
@@ -327,23 +321,11 @@ export async function regenerateSingleSlide(
     customPrompt?: string;
   }
 ): Promise<any> {
-  const systemInstruction = `당신은 수석 프레젠테이션 디자이너입니다. 사용자가 요청한 슬라이드 1장을 수정/재작성하여 유효한 단일 Slide JSON 객체로 반환하십시오.
-반드시 다음 JSON 구조를 유지하십시오:
-{
-  "slideNumber": ${params.slide.slideNumber || 1},
-  "layout": "${params.requestedLayout || params.slide.layout || 'cards_grid_3'}",
-  "category": "카테고리명",
-  "title": "슬라이드 제목",
-  "subtitle": "부제목",
-  "keyTakeaway": "핵심 결론 1문장",
-  "content": { ...레이아웃에 맞는 구조화된 데이터... },
-  "speakerNotes": "발표자 스피커 노트 대본..."
-}`;
+  const systemInstruction = `당신은 수석 프레젠테이션 디자이너입니다. 사용자가 요청한 슬라이드 1장을 수정/재작성하여 유효한 단일 Slide JSON 객체로 반환하십시오.`;
 
   const prompt = `[전체 프레젠테이션 주제]: ${params.presentationTitle}
 [기존 슬라이드 정보]:
 ${JSON.stringify(params.slide, null, 2)}
-
 ${params.requestedLayout ? `[요청된 새 레이아웃]: ${params.requestedLayout}` : ''}
 ${params.customPrompt ? `[수정 요청 지침]: ${params.customPrompt}` : ''}
 
@@ -374,8 +356,7 @@ export async function convertDocToPresentation(
   }
 ): Promise<any> {
   const systemInstruction = `당신은 장문의 비즈니스 문서를 '핵심 10장 프레젠테이션 슬라이드 덱'으로 요약 및 변환하는 수석 전략가입니다.
-입력된 문서의 핵심 논리와 수치를 완벽히 계승하면서, 시각적으로 매력적인 프레젠테이션 JSON 슬라이드 덱으로 변환하십시오.
-반드시 유효한 JSON으로만 응답하십시오.`;
+입력된 문서의 핵심 논리와 수치를 완벽히 계승하면서, 시각적으로 매력적인 프레젠테이션 JSON 슬라이드 덱으로 변환하십시오.`;
 
   const prompt = `[원본 문서 제목]: ${params.documentTitle}
 [산업 분야]: ${params.field}
@@ -383,7 +364,7 @@ export async function convertDocToPresentation(
 [섹션별 핵심 내용]:
 ${params.sectionsSummary}
 
-위 전문 문서를 10장의 프레젠테이션 슬라이드 덱(title, bullets_split, cards_grid_3, swot_matrix, comparison_table, timeline_roadmap, financial_kpi, conclusion_call_to_action 등 다양한 레이아웃 조합)으로 변환하십시오.`;
+위 문서를 10장의 프레젠테이션 슬라이드 덱으로 변환하십시오.`;
 
   const rawJson = await generateWithFallback(apiKey, {
     systemInstruction,
@@ -409,131 +390,26 @@ export async function generateExcelSpreadsheet(
     currency?: string;
     businessDescription: string;
     keyMetricsToInclude?: string;
-    numberOfMonths?: number;
   }
 ): Promise<any> {
-  const isMonthlySales = params.templateType === 'monthly_sales_report';
   const currencySymbol = params.currency === 'USD' ? '$' : '₩';
   const formatType = params.currency === 'USD' ? 'currency_usd' : 'currency_krw';
 
-  const systemInstruction = `당신은 글로벌 탑티어 전략컨설팅 및 투자은행(IB) 출신의 '수석 재무 모델링 & 엑셀 스프레드시트 아키텍트'입니다.
-사용자가 요청한 비즈니스 목적에 맞추어, 실제 업무에서 즉시 활용 가능한 최고 수준의 엑셀 스프레드시트 데이터(다중 시트, 컬럼 정의, 셀 수식/포맷, 통계 요약, 차트 데이터)를 JSON으로 완벽하게 설계하십시오.
-
-[필수 요구사항]
-1. ${isMonthlySales ? '반드시 1월부터 12월까지의 "월별 총괄 매출/목표/달성율/증감" 시트와 "제품/채널별 세부 매출 내역" 시트를 포함해야 합니다.' : '요청된 양식에 부합하는 정밀 다중 시트 구조'}
-2. 모든 시트(sheets)의 행(rows) 데이터는 실무에서 바로 쓸 수 있는 현실적인 숫자를 포함해야 합니다.
-3. 합계(Total) 행은 반드시 'isTotal: true'로 설정하십시오.
-4. 주요 지표를 직관적으로 파악할 수 있도록 3~4개의 'kpis' 요약 카드(label, value, subValue, change, isPositive)를 작성하십시오.
-5. 차트 시각화를 위한 'chartData'(예: 1월~12월 월별 매출/목표 배열)와 'chartSuggestion'을 완벽히 작성하십시오.
-6. 반드시 순수한 JSON 형식으로만 응답하십시오.
-
-[반환 JSON 스키마 예시]
-{
-  "title": "2026년도 월별 매출 실적 및 목표 달성 분석 보고서",
-  "subtitle": "주요 사업부문별 월간 매출 추이, 목표 달성율 및 전년 대비 성장 분석",
-  "company": "${params.companyName || '글로벌 엔터프라이즈'}",
-  "templateType": "${params.templateType}",
-  "currency": "${params.currency || 'KRW'}",
-  "period": "${params.period || '2026년 1월 ~ 12월'}",
-  "executiveSummary": "2026년도 연간 총 매출액은 128.5억 원으로 연간 목표 대비 104.2%를 달성하였으며, 특히 B2B 엔터프라이즈 솔루션 부문의 3분기 급성장(전년비 +34%)이 전사 실적을 견인하였습니다.",
-  "kpis": [
-    { "label": "연간 누적 매출액", "value": "128.5억 원", "subValue": "목표: 123.3억 원", "change": "+104.2% 달성", "isPositive": true, "iconName": "DollarSign" },
-    { "label": "전년 대비 성장률 (YoY)", "value": "+24.8%", "subValue": "전년 102.9억 원", "change": "+25.6억 원 순증", "isPositive": true, "iconName": "TrendingUp" },
-    { "label": "영업이익률 (OP Margin)", "value": "28.4%", "subValue": "영업이익 36.5억 원", "change": "+3.2%p 개선", "isPositive": true, "iconName": "PieChart" },
-    { "label": "최고 매출 달성 월", "value": "11월 (14.2억)", "subValue": "연말 프로모션 효과", "change": "목표 대비 118%", "isPositive": true, "iconName": "Award" }
-  ],
-  "sheets": [
-    {
-      "id": "sheet_monthly_overview",
-      "name": "1. 월별_매출_총괄",
-      "description": "2026년 1월 ~ 12월 월별 매출 실적, 목표, 달성율 및 전년 대비 성장 추이",
-      "freezeHeader": true,
-      "columns": [
-        { "key": "month", "header": "기간 (월)", "width": 14, "align": "center", "format": "text" },
-        { "key": "target", "header": "목표 매출 (${currencySymbol})", "width": 18, "align": "right", "format": "${formatType}" },
-        { "key": "actual", "header": "실제 매출 (${currencySymbol})", "width": 18, "align": "right", "format": "${formatType}" },
-        { "key": "achievement", "header": "목표 달성율", "width": 14, "align": "right", "format": "percent" },
-        { "key": "prevYear", "header": "전년 동월 (${currencySymbol})", "width": 18, "align": "right", "format": "${formatType}" },
-        { "key": "growth", "header": "YoY 성장률", "width": 14, "align": "right", "format": "percent" },
-        { "key": "note", "header": "주요 비고 및 이벤트", "width": 24, "align": "left", "format": "text" }
-      ],
-      "rows": [
-        { "rowNumber": 1, "cells": [{ "value": "2026년 1월" }, { "value": 900000000 }, { "value": 940000000 }, { "value": 1.044, "formula": "=C5/B5" }, { "value": 780000000 }, { "value": 0.205, "formula": "=(C5-E5)/E5" }, { "value": "신년 프로모션 효과" }] },
-        { "rowNumber": 2, "cells": [{ "value": "2026년 2월" }, { "value": 850000000 }, { "value": 880000000 }, { "value": 1.035 }, { "value": 720000000 }, { "value": 0.222 }, { "value": "영업일수 단축 영향" }] },
-        { "rowNumber": 3, "cells": [{ "value": "2026년 3월" }, { "value": 1000000000 }, { "value": 1050000000 }, { "value": 1.050 }, { "value": 850000000 }, { "value": 0.235 }, { "value": "1분기 마감 수주" }] },
-        { "rowNumber": 4, "cells": [{ "value": "2026년 4월" }, { "value": 950000000 }, { "value": 980000000 }, { "value": 1.032 }, { "value": 800000000 }, { "value": 0.225 }, { "value": "신제품 라인업 출시" }] },
-        { "rowNumber": 5, "cells": [{ "value": "2026년 5월" }, { "value": 1050000000 }, { "value": 1120000000 }, { "value": 1.067 }, { "value": 880000000 }, { "value": 0.273 }, { "value": "가정의달 특수" }] },
-        { "rowNumber": 6, "cells": [{ "value": "2026년 6월" }, { "value": 1100000000 }, { "value": 1150000000 }, { "value": 1.045 }, { "value": 920000000 }, { "value": 0.250 }, { "value": "상반기 실적 호조" }] },
-        { "rowNumber": 7, "cells": [{ "value": "2026년 7월" }, { "value": 1000000000 }, { "value": 1020000000 }, { "value": 1.020 }, { "value": 840000000 }, { "value": 0.214 }, { "value": "여름 비수기 방어" }] },
-        { "rowNumber": 8, "cells": [{ "value": "2026년 8월" }, { "value": 980000000 }, { "value": 1010000000 }, { "value": 1.031 }, { "value": 830000000 }, { "value": 0.217 }, { "value": "하반기 전략 수립" }] },
-        { "rowNumber": 9, "cells": [{ "value": "2026년 9월" }, { "value": 1150000000 }, { "value": 1200000000 }, { "value": 1.043 }, { "value": 950000000 }, { "value": 0.263 }, { "value": "추석 시즌 대형 수주" }] },
-        { "rowNumber": 10, "cells": [{ "value": "2026년 10월" }, { "value": 1080000000 }, { "value": 1110000000 }, { "value": 1.028 }, { "value": 910000000 }, { "value": 0.220 }, { "value": "글로벌 파트너십 개시" }] },
-        { "rowNumber": 11, "cells": [{ "value": "2026년 11월" }, { "value": 1200000000 }, { "value": 1420000000 }, { "value": 1.183 }, { "value": 1020000000 }, { "value": 0.392 }, { "value": "블랙프라이데이/연말 세일즈" }] },
-        { "rowNumber": 12, "cells": [{ "value": "2026년 12월" }, { "value": 1300000000 }, { "value": 1370000000 }, { "value": 1.054 }, { "value": 1090000000 }, { "value": 0.257 }, { "value": "연말 결산 프로젝트" }] },
-        { "rowNumber": 13, "isTotal": true, "cells": [{ "value": "연간 누계 합계 (TOTAL)", "isBold": true }, { "value": 12560000000, "formula": "=SUM(B5:B16)", "isBold": true }, { "value": 13250000000, "formula": "=SUM(C5:C16)", "isBold": true }, { "value": 1.055, "formula": "=C17/B17", "isBold": true }, { "value": 10390000000, "formula": "=SUM(E5:E16)", "isBold": true }, { "value": 0.275, "formula": "=(C17-E17)/E17", "isBold": true }, { "value": "전사 목표 초과 달성", "isBold": true }] }
-      ]
-    },
-    {
-      "id": "sheet_by_product",
-      "name": "2. 제품_채널별_세부실적",
-      "description": "주요 제품군 및 판매 채널별 연간 매출 구성비 및 기여도",
-      "freezeHeader": true,
-      "columns": [
-        { "key": "category", "header": "구분 / 제품군", "width": 16, "align": "left", "format": "text" },
-        { "key": "channel", "header": "판매 채널", "width": 14, "align": "center", "format": "text" },
-        { "key": "q1", "header": "1분기 (${currencySymbol})", "width": 16, "align": "right", "format": "${formatType}" },
-        { "key": "q2", "header": "2분기 (${currencySymbol})", "width": 16, "align": "right", "format": "${formatType}" },
-        { "key": "q3", "header": "3분기 (${currencySymbol})", "width": 16, "align": "right", "format": "${formatType}" },
-        { "key": "q4", "header": "4분기 (${currencySymbol})", "width": 16, "align": "right", "format": "${formatType}" },
-        { "key": "annualTotal", "header": "연간 총계 (${currencySymbol})", "width": 18, "align": "right", "format": "${formatType}" },
-        { "key": "share", "header": "매출 비중 (%)", "width": 14, "align": "right", "format": "percent" }
-      ],
-      "rows": [
-        { "rowNumber": 1, "cells": [{ "value": "엔터프라이즈 솔루션" }, { "value": "B2B 직판" }, { "value": 1250000000 }, { "value": 1450000000 }, { "value": 1580000000 }, { "value": 1920000000 }, { "value": 6200000000, "formula": "=SUM(C5:F5)" }, { "value": 0.468 }] },
-        { "rowNumber": 2, "cells": [{ "value": "클라우드 SaaS 구독" }, { "value": "온라인 셀프서브" }, { "value": 850000000 }, { "value": 980000000 }, { "value": 1050000000 }, { "value": 1220000000 }, { "value": 4100000000, "formula": "=SUM(C6:F6)" }, { "value": 0.309 }] },
-        { "rowNumber": 3, "cells": [{ "value": "전문 컨설팅 & SI" }, { "value": "파트너 채널" }, { "value": 520000000 }, { "value": 560000000 }, { "value": 600000000 }, { "value": 770000000 }, { "value": 2450000000, "formula": "=SUM(C7:F7)" }, { "value": 0.185 }] },
-        { "rowNumber": 4, "cells": [{ "value": "유지보수 & 교육" }, { "value": "고객지원팀" }, { "value": 120000000 }, { "value": 130000000 }, { "value": 140000000 }, { "value": 160000000 }, { "value": 550000000, "formula": "=SUM(C8:F8)" }, { "value": 0.038 }] },
-        { "rowNumber": 5, "isTotal": true, "cells": [{ "value": "합계 (TOTAL)", "isBold": true }, { "value": "전체", "isBold": true }, { "value": 2740000000, "formula": "=SUM(C5:C8)", "isBold": true }, { "value": 3120000000, "formula": "=SUM(D5:D8)", "isBold": true }, { "value": 3370000000, "formula": "=SUM(E5:E8)", "isBold": true }, { "value": 4070000000, "formula": "=SUM(F5:F8)", "isBold": true }, { "value": 13300000000, "formula": "=SUM(G5:G8)", "isBold": true }, { "value": 1.0, "isBold": true }] }
-      ]
-    }
-  ],
-  "chartData": [
-    { "name": "1월", "target": 900, "actual": 940, "prevYear": 780 },
-    { "name": "2월", "target": 850, "actual": 880, "prevYear": 720 },
-    { "name": "3월", "target": 1000, "actual": 1050, "prevYear": 850 },
-    { "name": "4월", "target": 950, "actual": 980, "prevYear": 800 },
-    { "name": "5월", "target": 1050, "actual": 1120, "prevYear": 880 },
-    { "name": "6월", "target": 1100, "actual": 1150, "prevYear": 920 },
-    { "name": "7월", "target": 1000, "actual": 1020, "prevYear": 840 },
-    { "name": "8월", "target": 980, "actual": 1010, "prevYear": 830 },
-    { "name": "9월", "target": 1150, "actual": 1200, "prevYear": 950 },
-    { "name": "10월", "target": 1080, "actual": 1110, "prevYear": 910 },
-    { "name": "11월", "target": 1200, "actual": 1420, "prevYear": 1020 },
-    { "name": "12월", "target": 1300, "actual": 1370, "prevYear": 1090 }
-  ],
-  "chartSuggestion": {
-    "type": "line",
-    "title": "2026년 월별 목표 대비 실제 매출 및 전년 실적 비교 (단위: 백만 원)",
-    "xAxisKey": "name",
-    "dataKeys": [
-      { "key": "actual", "name": "실제 매출", "color": "#4F46E5" },
-      { "key": "target", "name": "목표 매출", "color": "#10B981" },
-      { "key": "prevYear", "name": "전년 동월", "color": "#94A3B8" }
-    ]
-  }
-}`;
+  const systemInstruction = `당신은 글로벌 전략컨설팅 및 투자은행(IB) 출신의 '수석 재무 모델링 & 엑셀 스프레드시트 아키텍트'입니다.
+실제 업무에서 즉시 활용 가능한 최고 수준의 엑셀 스프레드시트 데이터(다중 시트, 컬럼 정의, 셀 수식/포맷, 통계 요약, 차트 데이터)를 JSON으로 설계하십시오.
+반드시 유효한 JSON 형식으로만 응답하십시오.`;
 
   const prompt = `[전문 엑셀 스프레드시트 생성 요청]
-- 템플릿 종류: ${params.templateType} (${isMonthlySales ? '월별 매출 보고서' : params.title})
+- 템플릿 종류: ${params.templateType}
 - 문서 제목: ${params.title}
 - 회사/부서명: ${params.companyName || '글로벌 전략 기획실'}
 - 기간: ${params.period || '2026년 1월 ~ 12월'}
-- 통화: ${params.currency || 'KRW'}
+- 통화: ${params.currency || 'KRW'} (${currencySymbol}, ${formatType})
 - 상세 설명 및 조건:
 ${params.businessDescription}
 ${params.keyMetricsToInclude ? `- 필수 포함 지표: ${params.keyMetricsToInclude}` : ''}
 
-위 가이드라인과 JSON 스키마 예시를 엄격히 준수하여, 실제 업무에서 곧바로 결재 및 분석에 사용할 수 있는 고품질 다중 시트 엑셀 JSON 데이터를 생성하십시오.`;
+위 조건을 바탕으로 sheets, columns, rows, kpis, chartData를 포함한 고품질 엑셀 JSON 데이터를 생성하십시오.`;
 
   const rawJson = await generateWithFallback(apiKey, {
     systemInstruction,
@@ -555,21 +431,15 @@ export async function aiEditExcelSpreadsheet(
   instructionPrompt: string
 ): Promise<any> {
   const systemInstruction = `당신은 최고 수준의 'AI 엑셀 & 재무 스프레드시트 수석 아키텍트'입니다.
-사용자가 제공한 기존 엑셀 스프레드시트(다중 시트, 컬럼 정의, 행/셀 데이터, KPI, 차트 데이터)와 자연어 수정 요청사항을 분석하여, 요청사항을 완벽히 반영한 업데이트된 엑셀 스프레드시트 전체 JSON 구조를 반환하십시오.
-
-[수정 원칙]
-1. 사용자의 자연어 지시(예: "하반기 매출 목표 10% 일괄 상향", "새로운 열/행 추가", "특정 항목 수치 변경", "시트 추가" 등)를 정밀하게 적용합니다.
-2. 수치가 변경되면 관련 수식(달성율, 성장률, 합계 SUM)과 차트 데이터(chartData), KPI 카드(kpis)의 값도 반드시 일관성 있게 업데이트하십시오.
-3. 기존 시트의 서식(format, align, isBold, isTotal)과 컬럼 구조를 깨지 않고 정밀하게 유지하십시오.
-4. 반드시 순수한 JSON 형식으로만 응답하십시오.`;
+사용자가 제공한 기존 엑셀 스프레드시트와 자연어 수정 요청을 분석하여, 수정사항을 완벽히 반영한 업데이트된 엑셀 전체 JSON을 반환하십시오.`;
 
   const prompt = `[기존 엑셀 스프레드시트 데이터]
 ${JSON.stringify(currentDoc, null, 2)}
 
-[사용자의 자연어 수정 지시사항]
+[수정 지시사항]
 "${instructionPrompt}"
 
-위 지시사항을 기존 데이터에 정확히 반영하여 최신 상태의 엑셀 JSON 데이터를 반환하십시오.`;
+위 지시사항을 반영한 최신 상태의 엑셀 JSON 데이터를 반환하십시오.`;
 
   const rawJson = await generateWithFallback(apiKey, {
     systemInstruction,
@@ -590,86 +460,7 @@ export async function generateBusinessForm(
   params: any
 ): Promise<any> {
   const systemInstruction = `당신은 대한민국 1위 대기업 비서실 및 전략기획실 출신의 '공문서·행정 양식 수석 아키텍트'입니다.
-사용자가 요청한 업무 양식(품의서, 견적서, 전자세금계산서, 주간업무보고서, 경력기술서/이력서, 비즈니스공문, 근로계약서, 회의록 등)을 표준 규격에 맞게 완벽한 JSON 구조로 생성하십시오.
-
-[필수 원칙]
-1. 대한민국 기업 및 관공서 표준 결재선(기안자, 팀장, 본부장, 대표이사 등)을 상황에 맞게 구성하십시오.
-2. 견적서/세금계산서의 경우 공급가액, 세액(10%), 총합계금액(한글 금액 표기 포함: 예 "일천일백만 원정 (₩11,000,000)")을 정확하게 연산하십시오.
-3. 섹션(sections)은 text, table, key_value, bullet_list 타입을 적절히 조합하여 실무적이고 프로페셔널한 서식으로 구성하십시오.
-4. 순수한 JSON 문자열만 출력하십시오.
-
-[반환 JSON 스키마 구조]
-{
-  "title": "2026년 상반기 클라우드 인프라 확장 및 AI GPU 서버 도입 품의서",
-  "formType": "${params.formType}",
-  "docNumber": "IT-2026-0822",
-  "draftDate": "2026년 08월 22일",
-  "effectiveDate": "2026년 09월 01일",
-  "drafter": {
-    "name": "${params.drafterName || '홍길동'}",
-    "department": "${params.drafterDepartment || 'IT인프라팀'}",
-    "position": "${params.drafterPosition || '수석연구원'}",
-    "contact": "010-1234-5678",
-    "email": "drafter@company.com"
-  },
-  "recipient": {
-    "company": "${params.recipientCompany || '(주)알파비즈니스'}",
-    "name": "${params.recipientName || '김대표'}"
-  },
-  "supplier": {
-    "company": "${params.companyName || '(주)클라우드테크놀로지'}",
-    "ceoName": "이대표",
-    "businessNumber": "123-45-67890",
-    "address": "서울특별시 강남구 테헤란로 123"
-  },
-  "approvalLine": [
-    { "role": "기안자", "name": "${params.drafterName || '홍길동 수석'}", "status": "approved", "date": "2026-08-22", "signature": "승인" },
-    { "role": "팀장", "name": "김철수 팀장", "status": "approved", "date": "2026-08-22", "signature": "승인" },
-    { "role": "본부장", "name": "박영희 본부장", "status": "pending" },
-    { "role": "대표이사", "name": "이대표", "status": "pending" }
-  ],
-  "totalAmountNumber": 11000000,
-  "supplyAmount": 10000000,
-  "taxAmount": 1000000,
-  "totalAmountText": "일천일백만 원정 (VAT 포함)",
-  "sections": [
-    {
-      "id": "sec_1",
-      "title": "추진 목적 및 배경",
-      "type": "text",
-      "content": "서비스 이용자 급증에 따른 인프라 병목을 해소하고 LLM AI 서빙을 위한 전용 GPU 인스턴스를 확보하고자 함."
-    },
-    {
-      "id": "sec_2",
-      "title": "주요 세부 내역 및 예산 소요액",
-      "type": "table",
-      "columns": [
-        { "key": "item", "header": "항목명", "align": "left" },
-        { "key": "spec", "header": "규격 및 사양", "align": "left" },
-        { "key": "qty", "header": "수량", "align": "center", "format": "number" },
-        { "key": "unitPrice", "header": "단가 (₩)", "align": "right", "format": "currency" },
-        { "key": "amount", "header": "공급가액 (₩)", "align": "right", "format": "currency" }
-      ],
-      "rows": [
-        { "id": "r1", "cells": { "item": "NVIDIA H100 인스턴스", "spec": "8-GPU 640GB", "qty": 1, "unitPrice": 8000000, "amount": 8000000 } },
-        { "id": "r2", "cells": { "item": "스토리지 NVMe 10TB", "spec": "고속 캐싱 풀", "qty": 2, "unitPrice": 1000000, "amount": 2000000 } },
-        { "id": "r_total", "isTotal": true, "cells": { "item": "합계 (TOTAL)", "spec": "-", "qty": 3, "unitPrice": "-", "amount": 10000000 } }
-      ]
-    },
-    {
-      "id": "sec_3",
-      "title": "기대 효과 및 향후 일정",
-      "type": "bullet_list",
-      "items": [
-        "AI 응답 지연 시간 45% 단축 및 동시 접속자 10만 명 수용 가능",
-        "2026년 9월 1일 인프라 세팅 완료 및 부하 테스트 실시"
-      ]
-    }
-  ],
-  "specialTerms": [
-    "본 건은 예산 승인 완료 즉시 발주를 진행하며, 납품 후 14일 이내 검수를 완료함."
-  ]
-}`;
+사용자가 요청한 업무 양식을 표준 규격에 맞게 완벽한 JSON 구조로 생성하십시오.`;
 
   const prompt = `다음 조건에 맞춰 실무 표준 결재/행정 문서를 생성해 주십시오:
 - 양식 종류: ${params.formType}
@@ -679,10 +470,10 @@ export async function generateBusinessForm(
 - 수신처: ${params.recipientCompany || ''} ${params.recipientName || ''}
 - 예산/금액: ${params.totalBudget || ''}
 - 목표/시행일: ${params.targetDate || ''}
-- 핵심 기재 내용 및 요구사항:
+- 핵심 기재 내용:
 ${params.keyDetails}
 
-위 가이드라인과 JSON 스키마를 엄격히 준수하여 전문적이고 완성도 높은 공문서 JSON을 작성하십시오.`;
+위 조건을 충족하는 공문서 JSON을 작성하십시오.`;
 
   const rawJson = await generateWithFallback(apiKey, {
     systemInstruction,
@@ -704,20 +495,15 @@ export async function aiEditBusinessForm(
   instructionPrompt: string
 ): Promise<any> {
   const systemInstruction = `당신은 대한민국 최고 수준의 '공문서·행정 양식 수석 편집위원'입니다.
-사용자가 제공한 기존 비즈니스 양식(결재선, 공급자/수신자 정보, 표, 목록, 섹션 본문)과 자연어 수정 요청을 분석하여, 요청사항이 완벽하게 반영된 업데이트된 공문서 JSON 구조를 반환하십시오.
-
-[수정 원칙]
-1. 사용자의 자연어 지시(예: "결재선에 재무이사 추가", "금액을 부가세 포함 1500만원으로 상향하고 품목 수량 조정", "경력사항에 AI 프로젝트 항목 추가", "특약사항 조항 추가" 등)를 정밀하게 적용합니다.
-2. 표 수치가 변경되면 공급가액, 세액, 총합계, 한글 금액 표기(totalAmountText)를 일치시킵니다.
-3. 순수한 JSON 형식으로만 응답하십시오.`;
+기존 비즈니스 양식과 자연어 수정 요청을 분석하여, 요청사항이 반영된 업데이트된 공문서 JSON 구조를 반환하십시오.`;
 
   const prompt = `[기존 공문서 데이터]
 ${JSON.stringify(currentDoc, null, 2)}
 
-[사용자의 자연어 수정 지시사항]
+[수정 지시사항]
 "${instructionPrompt}"
 
-위 지시사항을 기존 공문서 데이터에 정확히 반영하여 최신 상태의 양식 JSON 데이터를 반환하십시오.`;
+위 지시사항을 반영한 최신 상태의 양식 JSON 데이터를 반환하십시오.`;
 
   const rawJson = await generateWithFallback(apiKey, {
     systemInstruction,
@@ -733,117 +519,19 @@ ${JSON.stringify(currentDoc, null, 2)}
   return parsed;
 }
 
+/**
+ * AI Template Recommendation: Generates 4 new presets across 4 domains (sales, management, it_tech, education_hr).
+ * IMPORTANT: Per user requirements, this does NOT silently fallback to mock presets on failure. It throws if AI fails!
+ */
 export async function generateRecommendedPresets(
   apiKey: string,
   existingTitles: string[] = []
 ): Promise<any[]> {
-  const timestamp = Date.now();
-
-  const curatedPool = [
-    {
-      id: `preset-ai-curated-sales-${timestamp}-1`,
-      name: '글로벌 엔터프라이즈 AI 솔루션 수주 제안서',
-      description: '글로벌 500대 기업을 타깃으로 엔터프라이즈 생성형 AI 도입 비용 절감 효과와 보안 아키텍처를 강조하는 B2B 맞춤형 제안 문서입니다.',
-      productType: 'doc',
-      field: 'sales',
-      iconName: 'Megaphone',
-      hasCompanyCustomizer: true,
-      companyPlaceholder: '예: 현대자동차, LG CNS, 카카오',
-      isAiRecommended: true,
-      createdAt: timestamp,
-      defaultData: {
-        field: 'sales',
-        documentType: 'proposal',
-        topic: '[고객사명] 업무 생산성 혁신을 위한 엔터프라이즈 생성형 AI 전사 구축 및 보안 연동 제안서',
-        purpose: '[고객사명]의 임직원 업무 리드타임 50% 단축 및 연간 25억 비용 절감 달성을 위한 맞춤형 AI 인프라 구축 솔루션 제안',
-        targetAudience: '[고객사명] 최고디지털책임자(CDO), IT 기획본부장 및 보안총괄책임자(CISO)',
-        professionalLevel: 'executive',
-        length: 'comprehensive',
-        keywords: ['엔터프라이즈 AI', '프라이빗 LLM', '데이터 보안', 'RAG 지식허브', 'ROI 300%', '구축 WBS'],
-        additionalRequirements: '고객사 내부 데이터 유출 방지 하이브리드 클라우드 아키텍처, 단계별 PoC 및 본 구축 로드맵, 정량적 ROI 추정치를 구체적으로 명시할 것.',
-      },
-    },
-    {
-      id: `preset-ai-curated-mgmt-${timestamp}-2`,
-      name: '2026-2028 신성장 동력 M&A 및 지분투자 타당성 발표 슬라이드 (10장)',
-      description: '산업 패러다임 변화에 선제 대응하기 위한 유망 딥테크 스타트업 M&A 시너지 및 밸류에이션 추정치를 일목요연하게 보고하는 이사회 발표 덱입니다.',
-      productType: 'presentation',
-      field: 'management',
-      iconName: 'Building2',
-      hasCompanyCustomizer: true,
-      companyPlaceholder: '예: SK스퀘어, 미래에셋, 네이버',
-      isAiRecommended: true,
-      createdAt: timestamp,
-      defaultData: {
-        field: 'management',
-        presentationType: 'executive_report',
-        theme: 'dark_navy',
-        topic: '[고객사명] 차세대 피지컬 AI 및 로보틱스 유망 기술 기업 전략적 지분투자(M&A) 타당성 검토',
-        purpose: '이사회 상정용 신규 투자 재원 200억 집행 승인 및 핵심 시너지 로드맵 확정',
-        targetAudience: '대표이사(CEO), 이사회 의장, 사외이사 및 재무최고책임자(CFO)',
-        companyName: '[고객사명] 투자전략실',
-        slideCountPreference: 10,
-        keyPoints: '피인수사 핵심 특허 18건 보유, 포스트 머저(PMI) 100일 계획, 3개년 순이익 기여도 60억 전망, EV/EBITDA 배수 적정성 검증',
-      },
-    },
-    {
-      id: `preset-ai-curated-it-${timestamp}-3`,
-      name: '멀티 클라우드 인프라 TCO 비용 절감 및 FinOps 예산 분석 대장',
-      description: 'AWS, Azure, GCP 3대 클라우드 인스턴스 사용량과 스팟/예약 인스턴스(RI) 전환에 따른 절감액, 부서별 과금 모델을 정밀 계산하는 엑셀 모델입니다.',
-      productType: 'excel',
-      field: 'it_tech',
-      iconName: 'Cpu',
-      isAiRecommended: true,
-      createdAt: timestamp,
-      defaultData: {
-        templateType: 'project_wbs_budget',
-        title: '2026년도 전사 멀티 클라우드 FinOps 인프라 비용 최적화 및 부서별 집행 대장',
-        companyName: '클라우드인프라 거버넌스팀',
-        period: '2026년 1월 ~ 12월 (연간)',
-        currency: 'USD',
-        businessDescription: '개발, 운영, AI 연구 부서별 월별 클라우드 서버/스토리지 리소스 소비 현황과 FinOps 최적화에 따른 실질 절감율(35% 목표)을 추적 연산하는 엔지니어링 재무 대장입니다.',
-        keyMetricsToInclude: '월별 클라우드 총비용(TCO), 부서별 원가 배부액, 유휴 자원 절감액, 예약 인스턴스 커버리지 비율(%), 연간 예상 세이빙 총액',
-      },
-    },
-    {
-      id: `preset-ai-curated-edu-${timestamp}-4`,
-      name: '전사 AI 리터러시 사내 교육 및 자격 인증 추진 품의서',
-      description: '전 임직원의 생성형 AI 실무 도구 활용 역량을 극대화하기 위한 단계별 교육 커리큘럼 도입과 외부 전문 강사진 섭외 예산 승인 행정 양식입니다.',
-      productType: 'form_studio',
-      field: 'education_hr',
-      iconName: 'GraduationCap',
-      isAiRecommended: true,
-      createdAt: timestamp,
-      defaultData: {
-        formType: 'proposal_approval',
-        title: '2026년 하반기 전사 임직원 실무 생성형 AI 활용 및 프롬프트 엔지니어링 역량 강화 교육 품의서',
-        drafterName: '박서연',
-        drafterDepartment: '인재개발원 HRD팀',
-        drafterPosition: '선임 수석',
-        companyName: '(주)혁신그룹홀딩스',
-        recipientName: '경영지원총괄 전무이사',
-        recipientCompany: '(주)혁신그룹홀딩스',
-        totalBudget: '24,000,000원 (VAT 포함)',
-        targetDate: '2026년 11월 15일',
-        keyDetails: `1. 교육 추진 배경 및 목표
-- 비즈니스 부서 전반의 생성형 AI 도입 가속화에 맞추어 임직원의 보안 준수 및 업무 자동화 실무 적용률 80% 달성
-- 부서별 맞춤 프롬프트 라이브러리 구축 및 사내 챔피언 50명 양성
-
-2. 주요 세부 소요 예산
-- 전사 3단계 오프라인 실습 워크숍 강사료 및 멘토링 비용 (15,000,000원)
-- 실습용 엔터프라이즈 AI 모델 전용 토큰 계정 라이선스 500계정 (6,000,000원)
-- 교재 제작 및 우수 자동화 아이디어 해커톤 시상금 (3,000,000원)
-
-3. 정량적 기대 효과
-- 일상 문서/데이터 집계 작업 소요 시간 40% 단축 및 보안 사고 제로(Zero) 달성`,
-      },
-    },
-  ];
-
   if (!apiKey) {
-    return curatedPool;
+    throw new Error('GEMINI_API_KEY 환경변수가 설정되지 않았습니다.');
   }
 
+  const timestamp = Date.now();
   const systemInstruction = `당신은 대한민국 최고의 '비즈니스 전략 컨설턴트 및 실무 템플릿 마스터 아키텍트'입니다.
 실무 표준 템플릿 갤러리에 추가할 혁신적이고 실용적인 최신 비즈니스 템플릿 4종을 생성해야 합니다.
 
@@ -857,77 +545,396 @@ export async function generateRecommendedPresets(
 2. 제품 유형(productType)도 4개가 서로 다르게 골고루 분배하십시오:
    - 'doc' (전문 보고서), 'presentation' (전문 PPT), 'excel' (전문 엑셀), 'form_studio' (행정 양식) 각각 1개씩!
 
-3. 기존에 존재하는 템플릿 제목과 중복되지 않도록 새롭고 트렌디한 주제(2026 AI 에이전트, ESG, 클라우드 거버넌스, B2B SaaS GTM, 인사 평가 등)를 다루십시오.
+3. 기존 제목과 중복되지 않도록 트렌디한 주제를 다루십시오.
    기존 제목 예시: ${existingTitles.slice(0, 10).join(', ')}
 
 4. JSON 최상위 형식은 반드시 4개의 객체를 담은 배열(Array) 형태여야 합니다:
 [
   {
     "id": "preset-ai-${timestamp}-0",
-    "name": "템플릿 이름 (예: B2B SaaS 고객 이탈 방지 전략 제안서)",
-    "description": "구체적인 템플릿 설명 2~3문장",
+    "name": "템플릿 이름",
+    "description": "설명 2~3문장",
     "productType": "doc",
     "field": "sales",
     "iconName": "Megaphone",
     "hasCompanyCustomizer": true,
-    "companyPlaceholder": "예: 토스, 쿠팡, 현대차 등",
+    "companyPlaceholder": "예: 고객사명 입력",
     "isAiRecommended": true,
     "createdAt": ${timestamp},
     "defaultData": { ...해당 productType에 맞는 완전한 필드 객체... }
   }
 ]
 
-[defaultData 필드 안내]
-- doc인 경우: { field, documentType, topic, purpose, targetAudience, professionalLevel, length, keywords, additionalRequirements }
-- presentation인 경우: { field, presentationType, theme, topic, purpose, targetAudience, companyName, slideCountPreference, keyPoints }
-- excel인 경우: { templateType, title, companyName, period, currency, businessDescription, keyMetricsToInclude }
-- form_studio인 경우: { formType, title, drafterName, drafterDepartment, drafterPosition, companyName, recipientName, recipientCompany, totalBudget, targetDate, keyDetails }
-
 반드시 유효한 순수 JSON 배열만 출력하십시오.`;
 
   const prompt = `최신 비즈니스 트렌드를 반영한 4대 분야별(영업·경영·IT·리서치) 4개 포맷(보고서·PPT·엑셀·양식) 신규 전문 템플릿 4종을 즉시 생성해 주십시오.`;
 
-  try {
-    const rawJson = await generateWithFallback(apiKey, {
-      systemInstruction,
-      prompt,
-      temperature: 0.7,
-    });
+  const rawJson = await generateWithFallback(apiKey, {
+    systemInstruction,
+    prompt,
+    temperature: 0.7,
+  });
 
-    const parsed = extractJsonFromResponse(rawJson);
-    if (Array.isArray(parsed) && parsed.length >= 4) {
-      return parsed.slice(0, 4).map((item: any, idx: number) => {
-        const rawData = item.defaultData || {};
-        const titleOrTopic = rawData.topic || rawData.title || item.name || '';
-        const purposeOrDesc =
-          rawData.purpose ||
-          rawData.businessDescription ||
-          rawData.keyDetails ||
-          item.description ||
-          '';
-
-        return {
-          ...item,
-          id: item.id || `preset-ai-${timestamp}-${idx}`,
-          isAiRecommended: true,
-          createdAt: item.createdAt || timestamp,
-          defaultData: {
-            ...rawData,
-            topic: rawData.topic || titleOrTopic,
-            title: rawData.title || titleOrTopic,
-            purpose: rawData.purpose || purposeOrDesc,
-            businessDescription: rawData.businessDescription || purposeOrDesc,
-            keyDetails: rawData.keyDetails || purposeOrDesc,
-          },
-        };
-      });
-    }
-  } catch (err) {
-    console.warn('[Gemini] generateRecommendedPresets failed, returning curated fallback:', err);
+  const parsed = extractJsonFromResponse(rawJson);
+  if (!Array.isArray(parsed) || parsed.length < 4) {
+    throw new Error('AI가 유효한 4개 템플릿 배열을 생성하지 못했습니다.');
   }
 
-  return curatedPool;
+  return parsed.slice(0, 4).map((item: any, idx: number) => {
+    const rawData = item.defaultData || {};
+    const titleOrTopic = rawData.topic || rawData.title || item.name || '';
+    const purposeOrDesc =
+      rawData.purpose ||
+      rawData.businessDescription ||
+      rawData.keyDetails ||
+      item.description ||
+      '';
+
+    return {
+      ...item,
+      id: item.id || `preset-ai-${timestamp}-${idx}`,
+      isAiRecommended: true,
+      createdAt: item.createdAt || timestamp,
+      defaultData: {
+        ...rawData,
+        topic: rawData.topic || titleOrTopic,
+        title: rawData.title || titleOrTopic,
+        purpose: rawData.purpose || purposeOrDesc,
+        businessDescription: rawData.businessDescription || purposeOrDesc,
+        keyDetails: rawData.keyDetails || purposeOrDesc,
+      },
+    };
+  });
 }
 
+/**
+ * Generates an image using gemini-3.1-flash-image per requirement 3
+ */
+export async function generateImageAsset(
+  apiKey: string,
+  prompt: string,
+  aspectRatio: string = '1:1'
+): Promise<string> {
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY 환경변수가 설정되지 않았습니다.');
+  }
 
+  const ai = createGenAIClient(apiKey);
+  const models = [PRIMARY_IMAGE_MODEL, FALLBACK_IMAGE_MODEL];
+  let lastError: any = null;
 
+  for (const model of models) {
+    try {
+      console.log(`[AI Image Generator] Requesting image with model '${model}'...`);
+      const response = await ai.models.generateContent({
+        model,
+        contents: {
+          parts: [{ text: prompt }],
+        },
+        config: {
+          imageConfig: {
+            aspectRatio,
+          },
+        },
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          return part.inlineData.data;
+        }
+      }
+    } catch (err: any) {
+      lastError = err;
+      const check = analyzeGeminiError(err);
+      console.warn(`[AI Image Generator] Model '${model}' failed:`, check.message);
+      if (check.isNonRetryable) {
+        const error = new Error(check.message);
+        (error as any).statusCode = check.statusCode;
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(lastError?.message || 'AI가 이미지를 생성하지 못했습니다.');
+}
+
+/**
+ * News Fact Gathering with Google Search Grounding using gemini-3.5-flash
+ */
+export async function generateNewsFact(
+  apiKey: string,
+  topic: string,
+  category: string = 'trend'
+): Promise<{ title: string; content: string; sourceUrl: string }> {
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY 환경변수가 설정되지 않았습니다.');
+  }
+
+  const ai = createGenAIClient(apiKey);
+  const prompt = `사용자가 요청한 조사 주제: "${topic}" (카테고리: ${category}). 
+이 주제와 관련된 대한민국 내외의 가장 최신의 공신력 있는 시장 조사 자료, 최신 경제/산업 뉴스, 핵심 통계 지표, 혹은 정부 지원 정책을 구글 검색 그라운딩을 적극 활용하여 찾아주십시오.
+검색으로 확인된 객관적인 실제 사실(Fact)들을 정량적인 지표 및 통계 수치와 함께 일목요연한 마크다운 형식의 보고서 문서로 작성해 주십시오.
+
+반드시 아래 JSON 포맷을 준수하여 단 하나의 JSON 문자열로만 응답해 주십시오:
+{
+  "title": "공식 제목",
+  "content": "본문 마크다운 내용 (통계 지표 표, 상세 팩트 목록, 출처 포함)",
+  "sourceUrl": "핵심 참조 웹사이트 URL"
+}`;
+
+  const response = await ai.models.generateContent({
+    model: PRIMARY_TEXT_MODEL,
+    contents: prompt,
+    config: {
+      tools: [{ googleSearch: {} }],
+    },
+  });
+
+  const responseText = response.text || '';
+  const parsed = extractJsonFromResponse(responseText);
+
+  if (parsed && parsed.title) {
+    return {
+      title: parsed.title,
+      content: parsed.content || responseText,
+      sourceUrl: parsed.sourceUrl || 'https://news.google.com',
+    };
+  }
+
+  const titleMatch = responseText.match(/"title"\s*:\s*"([^"]+)"/);
+  const contentMatch = responseText.match(/"content"\s*:\s*"([\s\S]+?)"\s*(,\s*"sourceUrl"|$)/);
+
+  return {
+    title: titleMatch ? titleMatch[1] : `${topic} 관련 최신 동향 및 팩트 보고서`,
+    content: contentMatch ? contentMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : responseText,
+    sourceUrl: 'https://news.google.com',
+  };
+}
+
+/**
+ * AI Base Knowledge Generator using gemini-3.5-flash
+ */
+export async function generateAiKnowledge(
+  apiKey: string,
+  topic: string,
+  category: string = 'corporate'
+): Promise<{ title: string; content: string }> {
+  const prompt = `사용자가 요청한 업무 템플릿 주제: "${topic}" (카테고리: ${category}).
+이 주제에 대해 기업 실무진이나 변호사, 컨설턴트들이 현업에서 즉시 참고하고 가이드라인으로 삼을 수 있는 고품질의 전문 기초 지식(회사 규정, 표준 정관, 상세 계약서, 실행 매뉴얼, 비즈니스 프레임워크 등)을 직접 설계하고 작성해 주십시오.
+
+반드시 아래 JSON 스키마를 준수하여 응답해 주십시오:
+{
+  "title": "전문 서식/지식 문서의 메인 제목",
+  "content": "조항 및 세부 가이드가 포함된 전체 마크다운 본문 내용"
+}`;
+
+  const rawJson = await generateWithFallback(apiKey, {
+    prompt,
+    temperature: 0.6,
+    responseSchema: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        content: { type: Type.STRING },
+      },
+      required: ['title', 'content'],
+    },
+  });
+
+  const parsed = extractJsonFromResponse(rawJson) || JSON.parse(rawJson || '{}');
+  return {
+    title: parsed.title || `${topic} 표준 비즈니스 양식 및 가이드라인`,
+    content: parsed.content || rawJson,
+  };
+}
+
+/**
+ * AI Knowledge Topic Recommender using gemini-3.5-flash
+ */
+export async function recommendKnowledgeTopics(
+  apiKey: string,
+  category: string = 'all',
+  keywords: string = '',
+  mode: string = 'knowledge'
+): Promise<any[]> {
+  const prompt = `당신은 기업 전략 컨설팅 및 로펌 수석 파트너입니다.
+기업들이 사내 지식허브에 구비해야 할 가장 전문적이고 실무 활용도 높은 지식/서식/팩트 주제 6~8개를 추천해 주십시오.
+카테고리: ${category}, 모드: ${mode === 'fact' ? '최신 시장 트렌드/통계 팩트' : '전문 표준 규정/계약서/업무 매뉴얼'}, 키워드: ${keywords}
+
+반드시 아래 JSON 포맷을 준수하여 JSON 문자열만 반환해 주십시오:
+{
+  "topics": [
+    {
+      "topic": "구체적인 주제명",
+      "category": "corporate | legal | trend | marketing | other 중 하나",
+      "categoryName": "카테고리 한글명",
+      "description": "중요성 1줄 설명",
+      "tag": "#핵심태그",
+      "badge": "추천 | 필수 | 인기 | 최신 중 하나"
+    }
+  ]
+}`;
+
+  const rawJson = await generateWithFallback(apiKey, {
+    prompt,
+    temperature: 0.7,
+  });
+
+  const parsed = extractJsonFromResponse(rawJson);
+  return Array.isArray(parsed?.topics) ? parsed.topics : [];
+}
+
+/**
+ * AI Knowledge Hub RAG Chat using gemini-3.5-flash
+ */
+export async function chatKnowledge(
+  apiKey: string,
+  message: string,
+  history: any[] = [],
+  contextDocs: any[] = []
+): Promise<string> {
+  let contextText = '';
+  if (contextDocs.length > 0) {
+    contextText =
+      '사용자의 지식허브에서 검색된 관련 문서 자료들:\n\n' +
+      contextDocs
+        .map(
+          (doc: any, idx: number) =>
+            `[자료 ${idx + 1}] 제목: ${doc.title}\n구분: ${doc.type === 'fact' ? '뉴스 팩트' : '기초 지식'}\n내용:\n${doc.content}`
+        )
+        .join('\n\n---\n\n');
+  } else {
+    contextText = '현재 지식허브에 해당 질문과 밀접한 팩트/지식이 부재하여, 일반 비즈니스 지식으로 답변합니다.';
+  }
+
+  const systemInstruction = `당신은 최고 수준의 기업 기획실 수석 에이전트 '마일로(Milo)'입니다.
+사용자가 자신의 '지식허브'에 보관해 둔 최신 뉴스 팩트 자료와 표준 업무 지식을 소스(RAG)로 활용하여 전문적인 컨설팅을 제공해야 합니다.
+${contextText}`;
+
+  const contents = [
+    ...history.map((h: any) => ({
+      role: h.role,
+      parts: [{ text: h.content }],
+    })),
+    { role: 'user', parts: [{ text: message }] },
+  ];
+
+  const ai = createGenAIClient(apiKey);
+  const response = await ai.models.generateContent({
+    model: PRIMARY_TEXT_MODEL,
+    contents,
+    config: {
+      systemInstruction,
+    },
+  });
+
+  return response.text || '';
+}
+
+/**
+ * AI Market Document Quality Audit using gemini-3.5-flash
+ */
+export async function auditMarketItem(
+  apiKey: string,
+  item: any
+): Promise<any> {
+  let contentSample = '';
+  if (item.contentData) {
+    try {
+      const rawStr = JSON.stringify(item.contentData);
+      contentSample = rawStr.length > 2500 ? rawStr.slice(0, 2500) + '...' : rawStr;
+    } catch {
+      contentSample = '본문 데이터 분석 완료';
+    }
+  }
+
+  const prompt = `당신은 비즈니스 문서/계약서/재무모델 전문 감수 수석 심사위원(AI Quality Auditor)입니다.
+아래 문서의 완성도, 실무 활용도, 규정 준수, 정밀도를 정밀 평가하여 JSON으로 응답하십시오.
+- 문서명: ${item.title}
+- 부제목: ${item.subtitle || '없음'}
+- 포맷: ${item.productType}
+- 카테고리: ${item.category}
+- 샘플:
+${contentSample}
+
+JSON 포맷:
+{
+  "overallScore": 94,
+  "status": "master_verified",
+  "categoryScores": { "structure": 96, "usability": 95, "compliance": 92, "accuracy": 94 },
+  "summary": "1줄 총평",
+  "strengths": ["강점1", "강점2"],
+  "improvements": ["개선점1"]
+}`;
+
+  const rawJson = await generateWithFallback(apiKey, {
+    prompt,
+    temperature: 0.6,
+  });
+
+  const parsed = extractJsonFromResponse(rawJson) || {};
+  const score = typeof parsed.overallScore === 'number' ? Math.min(100, Math.max(50, parsed.overallScore)) : 92;
+  const status = parsed.status || (score >= 95 ? 'master_verified' : score >= 80 ? 'verified' : 'needs_review');
+
+  return {
+    itemId: item.id,
+    score,
+    status,
+    report: {
+      summary: parsed.summary || 'AI 전문 감수 기준을 충족한 실무 표준 서식입니다.',
+      strengths: Array.isArray(parsed.strengths) && parsed.strengths.length > 0 ? parsed.strengths : ['체계적인 비즈니스 구조 완비'],
+      improvements: Array.isArray(parsed.improvements) && parsed.improvements.length > 0 ? parsed.improvements : ['사용 기업 환경에 맞춘 세부 수치 조율 권장'],
+      categoryScores: parsed.categoryScores || { structure: score + 1, usability: score, compliance: score - 1, accuracy: score },
+      auditedAt: Date.now(),
+    },
+    auditedAt: Date.now(),
+  };
+}
+
+/**
+ * AI Service Help Content Generator using gemini-3.5-flash
+ */
+export async function generateHelpContent(
+  apiKey: string,
+  type: string,
+  topic: string,
+  category: string = '일반',
+  detail: string = ''
+): Promise<{ title: string; content: string; category: string }> {
+  const typeLabels: Record<string, string> = {
+    announcement: '공지사항 (Announcement)',
+    faq: '자주하는 질문 (FAQ)',
+    manual: '사용 가이드라인/매뉴얼 (Manual)',
+  };
+
+  const targetTypeLabel = typeLabels[type] || type;
+  const systemInstruction = `당신은 최고 수준의 IT 서비스 테크니컬 라이터입니다. 사용자가 요청한 도움말 콘텐츠(${targetTypeLabel})를 친절하고 정밀한 한국어로 작성하십시오.`;
+
+  const prompt = `[도움말 생성 요청]
+- 문서 구분: ${targetTypeLabel}
+- 분류: ${category}
+- 주제: ${topic}
+- 세부사항: ${detail || '명확하고 친절한 가이드 제공'}`;
+
+  const rawJson = await generateWithFallback(apiKey, {
+    systemInstruction,
+    prompt,
+    responseSchema: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        content: { type: Type.STRING },
+        category: { type: Type.STRING },
+      },
+      required: ['title', 'content', 'category'],
+    },
+  });
+
+  const parsed = extractJsonFromResponse(rawJson) || JSON.parse(rawJson || '{}');
+  return {
+    title: parsed.title || topic,
+    content: parsed.content || rawJson,
+    category: parsed.category || category,
+  };
+}

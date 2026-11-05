@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import dotenv from 'dotenv';
 import { Type } from '@google/genai';
 import {
   generateWithFallback,
@@ -13,9 +12,14 @@ import {
   generateBusinessForm,
   aiEditBusinessForm,
   generateRecommendedPresets,
-} from '../src/server/geminiGenerator';
-
-dotenv.config();
+  generateImageAsset,
+  generateNewsFact,
+  generateAiKnowledge,
+  recommendKnowledgeTopics,
+  chatKnowledge,
+  auditMarketItem,
+  generateHelpContent,
+} from './geminiGenerator';
 
 const FIELD_LABELS: Record<string, string> = {
   management: '경영 / 전략',
@@ -120,70 +124,101 @@ function normalizeSlideItem(rawSlide: any, idx: number, mainTopic: string) {
   };
 }
 
-type RequestLike = IncomingMessage & { body?: any; query?: Record<string, any> };
-type ResponseLike = ServerResponse & {
-  status: (code: number) => ResponseLike;
-  json: (data: any) => void;
+export type RequestLike = IncomingMessage & { body?: any; query?: Record<string, any> };
+export type ResponseLike = ServerResponse & {
+  status?: (code: number) => ResponseLike;
+  json?: (data: any) => void;
 };
 
-export default async function handler(req: RequestLike, res: ResponseLike) {
-  // CORS & Methods
+/**
+ * Universal API Request Handler used both in Express (server.ts) and Vercel Serverless Function (api/[...path])
+ */
+export async function handleApiRequest(req: RequestLike, res: ResponseLike): Promise<void> {
+  // CORS & Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  // Helper methods for standard ServerResponse if not polyfilled
-  if (!res.status) {
-    res.status = function (code: number) {
-      res.statusCode = code;
-      return res;
-    };
-  }
-  if (!res.json) {
-    res.json = function (data: any) {
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(data));
-    };
-  }
+  // Response polyfill
+  const sendStatus = (code: number) => {
+    res.statusCode = code;
+    return res;
+  };
+  const sendJson = (data: any) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(data));
+  };
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 200;
-    return res.end();
+    res.end();
+    return;
   }
 
-  // Parse body if not parsed
-  if (!req.body && req.method === 'POST') {
+  // Parse Body if not yet parsed (IncomingMessage stream)
+  if (!req.body && (req.method === 'POST' || req.method === 'PUT')) {
     try {
       const buffers = [];
       for await (const chunk of req) {
         buffers.push(chunk);
       }
-      const rawText = Buffer.concat(buffers).toString();
+      const rawText = Buffer.concat(buffers).toString('utf-8');
       req.body = rawText ? JSON.parse(rawText) : {};
     } catch {
       req.body = {};
     }
   }
 
-  const endpoint = (req.query?.endpoint as string) || (req.url?.split('?')[0].replace('/api/', '')) || '';
+  // Path resolution: Handles /api/health, /api/agent/chat, and Vercel ?path=agent&path=chat
+  let rawUrlPath = (req.url || '').split('?')[0];
+  if (rawUrlPath.startsWith('/api/')) {
+    rawUrlPath = rawUrlPath.substring(5); // strip '/api/'
+  } else if (rawUrlPath.startsWith('/api')) {
+    rawUrlPath = rawUrlPath.substring(4);
+  }
+  if (rawUrlPath.startsWith('/')) {
+    rawUrlPath = rawUrlPath.substring(1);
+  }
 
-  // 1. Health check
-  if (endpoint === 'health' || req.url?.includes('/api/health')) {
-    return res.status(200).json({
+  // Query parameter fallback (Vercel catch-all route [...path])
+  let endpoint = rawUrlPath;
+  if (!endpoint && req.query?.path) {
+    if (Array.isArray(req.query.path)) {
+      endpoint = req.query.path.join('/');
+    } else {
+      endpoint = String(req.query.path);
+    }
+  }
+  if (endpoint.endsWith('/')) {
+    endpoint = endpoint.slice(0, -1);
+  }
+
+  // 1. Health check (GET /api/health or /health)
+  // Per requirements: Must return 200 JSON even if API key is not present, without exposing key value.
+  if (endpoint === 'health' || req.url?.includes('/health')) {
+    sendStatus(200);
+    sendJson({
       status: 'ok',
-      service: 'Domain-Specific Professional Document Generator (Vercel Serverless)',
+      service: 'Domain-Specific Professional Document Generator',
+      version: '2.0.0',
       hasGeminiKey: !!process.env.GEMINI_API_KEY,
       timestamp: new Date().toISOString(),
     });
+    return;
   }
 
+  // Verify GEMINI_API_KEY
   const apiKey = process.env.GEMINI_API_KEY || '';
   if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다. Vercel Project Settings를 확인해 주세요.' });
+    sendStatus(500);
+    sendJson({
+      error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다. Vercel Project Settings > Environment Variables를 확인해 주세요.',
+    });
+    return;
   }
 
   try {
-    // 2. Generate Document
+    // 2. Full Document Generation
     if (endpoint === 'generate-document') {
       const {
         field,
@@ -316,10 +351,12 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         },
       };
 
-      return res.status(200).json({ success: true, document: finalDoc });
+      sendStatus(200);
+      sendJson({ success: true, document: finalDoc });
+      return;
     }
 
-    // 3. Generate Section
+    // 3. Single Section Regeneration
     if (endpoint === 'generate-section') {
       const { docTitle, field, documentType, sectionNumber, sectionTitle, existingContent, instruction, tone } = req.body || {};
       const prompt = `[전문 문서 개별 섹션 재작성/보강 요청]
@@ -331,14 +368,18 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
 - 요청 톤앤매너: ${tone || '전문적 비즈니스 문체'}`;
 
       const newContent = await generateWithFallback(apiKey, { prompt, temperature: 0.7 });
-      return res.status(200).json({ success: true, content: newContent });
+      sendStatus(200);
+      sendJson({ success: true, content: newContent });
+      return;
     }
 
-    // 4. Agent Chat
+    // 4. Consultant Agent Chat (Handles both /api/agent/chat and /api/chat)
     if (endpoint === 'agent/chat' || endpoint === 'chat') {
       const { messages = [], currentContext } = req.body || {};
       const reply = await chatWithDocumentAgent(apiKey, messages, currentContext);
-      return res.status(200).json({ success: true, reply });
+      sendStatus(200);
+      sendJson({ success: true, reply });
+      return;
     }
 
     // 5. Generate Presentation
@@ -371,7 +412,9 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         slides: normalizedSlides,
         metadata: { createdAt: Date.now(), updatedAt: Date.now(), slideCount: normalizedSlides.length },
       };
-      return res.status(200).json({ success: true, presentation: presentationDoc });
+      sendStatus(200);
+      sendJson({ success: true, presentation: presentationDoc });
+      return;
     }
 
     // 6. Regenerate Single Slide
@@ -384,7 +427,9 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         customPrompt,
       });
       const normalized = normalizeSlideItem({ ...slide, ...updatedSlideData }, (slide.slideNumber || 1) - 1, presentationTitle || '비즈니스 전략');
-      return res.status(200).json({ success: true, slide: normalized });
+      sendStatus(200);
+      sendJson({ success: true, slide: normalized });
+      return;
     }
 
     // 7. Convert Document to Presentation
@@ -414,10 +459,12 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         slides: normalizedSlides,
         metadata: { createdAt: Date.now(), updatedAt: Date.now(), slideCount: normalizedSlides.length },
       };
-      return res.status(200).json({ success: true, presentation: presentationDoc });
+      sendStatus(200);
+      sendJson({ success: true, presentation: presentationDoc });
+      return;
     }
 
-    // 8. Generate Excel
+    // 8. Generate Excel Spreadsheet
     if (endpoint === 'generate-excel') {
       const { templateType = 'monthly_sales_report', title = '', companyName = '', period = '2026년 1월 ~ 12월', currency = 'KRW', businessDescription = '', keyMetricsToInclude = '' } = req.body || {};
       const rawExcelData = await generateExcelSpreadsheet(apiKey, { templateType, title, companyName, period, currency, businessDescription, keyMetricsToInclude });
@@ -435,7 +482,9 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         chartData: Array.isArray(rawExcelData.chartData) ? rawExcelData.chartData : undefined,
         metadata: { createdAt: Date.now(), updatedAt: Date.now(), sheetCount: rawExcelData.sheets?.length || 1 },
       };
-      return res.status(200).json({ success: true, document: excelDoc });
+      sendStatus(200);
+      sendJson({ success: true, document: excelDoc });
+      return;
     }
 
     // 9. AI Edit Excel
@@ -454,7 +503,9 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         chartSuggestion: updatedRaw.chartSuggestion || currentDocument.chartSuggestion,
         metadata: { ...currentDocument.metadata, updatedAt: Date.now(), sheetCount: updatedRaw.sheets?.length || currentDocument.sheets?.length || 1 },
       };
-      return res.status(200).json({ success: true, document: updatedExcelDoc });
+      sendStatus(200);
+      sendJson({ success: true, document: updatedExcelDoc });
+      return;
     }
 
     // 10. Generate Business Form
@@ -497,7 +548,9 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         specialTerms: generatedRaw.specialTerms || [],
         metadata: { createdAt: Date.now(), updatedAt: Date.now() },
       };
-      return res.status(200).json({ success: true, document: formDocument });
+      sendStatus(200);
+      sendJson({ success: true, document: formDocument });
+      return;
     }
 
     // 11. AI Edit Business Form
@@ -522,19 +575,119 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         specialTerms: Array.isArray(updatedRaw.specialTerms) ? updatedRaw.specialTerms : currentDocument.specialTerms,
         metadata: { ...currentDocument.metadata, updatedAt: Date.now() },
       };
-      return res.status(200).json({ success: true, document: updatedFormDoc });
+      sendStatus(200);
+      sendJson({ success: true, document: updatedFormDoc });
+      return;
     }
 
-    // 12. Generate Templates (Presets)
+    // 12. AI Recommended Presets (4 new presets across 4 domains)
     if (endpoint === 'generate-templates') {
       const { existingTitles = [] } = req.body || {};
       const newPresets = await generateRecommendedPresets(apiKey, existingTitles);
-      return res.status(200).json({ success: true, templates: newPresets });
+      sendStatus(200);
+      sendJson({ success: true, templates: newPresets });
+      return;
     }
 
-    return res.status(404).json({ error: `Not Found endpoint: /api/${endpoint}` });
+    // 13. AI Image Generation (gemini-3.1-flash-image)
+    if (endpoint === 'generate-image-asset') {
+      const { prompt, aspectRatio = '1:1' } = req.body || {};
+      if (!prompt) {
+        sendStatus(400);
+        sendJson({ error: '이미지 생성 프롬프트가 필요합니다.' });
+        return;
+      }
+      const base64 = await generateImageAsset(apiKey, prompt, aspectRatio);
+      sendStatus(200);
+      sendJson({ success: true, base64 });
+      return;
+    }
+
+    // 14. News Fact Gathering with Google Search Grounding
+    if (endpoint === 'generate-news-fact') {
+      const { topic, category = 'trend' } = req.body || {};
+      if (!topic) {
+        sendStatus(400);
+        sendJson({ error: '검색 주제가 필요합니다.' });
+        return;
+      }
+      const item = await generateNewsFact(apiKey, topic, category);
+      sendStatus(200);
+      sendJson({ success: true, item });
+      return;
+    }
+
+    // 15. AI Base Knowledge Generator
+    if (endpoint === 'generate-ai-knowledge') {
+      const { topic, category = 'corporate' } = req.body || {};
+      if (!topic) {
+        sendStatus(400);
+        sendJson({ error: '지식 생성 주제가 필요합니다.' });
+        return;
+      }
+      const item = await generateAiKnowledge(apiKey, topic, category);
+      sendStatus(200);
+      sendJson({ success: true, item });
+      return;
+    }
+
+    // 16. AI Knowledge Topic Recommender
+    if (endpoint === 'recommend-knowledge-topics') {
+      const { category = 'all', keywords = '', mode = 'knowledge' } = req.body || {};
+      const topics = await recommendKnowledgeTopics(apiKey, category, keywords, mode);
+      sendStatus(200);
+      sendJson({ success: true, topics });
+      return;
+    }
+
+    // 17. AI Knowledge Hub RAG Chat
+    if (endpoint === 'chat-knowledge') {
+      const { message, history = [], contextDocs = [] } = req.body || {};
+      if (!message) {
+        sendStatus(400);
+        sendJson({ error: '질문 메시지가 필요합니다.' });
+        return;
+      }
+      const reply = await chatKnowledge(apiKey, message, history, contextDocs);
+      sendStatus(200);
+      sendJson({ success: true, reply });
+      return;
+    }
+
+    // 18. AI Market Document Quality Audit
+    if (endpoint === 'audit-market-item') {
+      const { item } = req.body || {};
+      if (!item || !item.title) {
+        sendStatus(400);
+        sendJson({ error: '검수할 마켓 문서 데이터가 필요합니다.' });
+        return;
+      }
+      const result = await auditMarketItem(apiKey, item);
+      sendStatus(200);
+      sendJson({ success: true, ...result });
+      return;
+    }
+
+    // 19. AI Service Help Content Generator
+    if (endpoint === 'generate-help-content') {
+      const { type, topic, category = '일반', detail = '' } = req.body || {};
+      if (!type || !topic) {
+        sendStatus(400);
+        sendJson({ error: '도움말 타입(type)과 주제(topic)는 필수 입력 항목입니다.' });
+        return;
+      }
+      const item = await generateHelpContent(apiKey, type, topic, category, detail);
+      sendStatus(200);
+      sendJson({ success: true, item });
+      return;
+    }
+
+    sendStatus(404);
+    sendJson({ error: `Not Found endpoint: /api/${endpoint}` });
   } catch (error: any) {
-    console.error(`Error handling /api/${endpoint}:`, error);
-    return res.status(500).json({ error: error.message || '서버 오류가 발생했습니다.' });
+    const statusCode = error.statusCode || 500;
+    console.error(`Error handling /api/${endpoint} (status ${statusCode}):`, error.message || error);
+    sendStatus(statusCode);
+    sendJson({ error: error.message || '서버 처리 중 오류가 발생했습니다.' });
   }
 }

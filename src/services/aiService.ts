@@ -26,30 +26,37 @@ export interface AgentChatResponse {
 }
 
 function parseErrorMessage(err: any, status?: number): string {
+  const statusPrefix = status ? `[HTTP ${status}] ` : '';
+
   if (!err) {
-    if (status === 404) return '서버 엔드포인트를 찾을 수 없습니다. (404 Not Found)';
-    if (status === 503) return 'AI 서버가 혼잡합니다. 잠시 후 다시 시도해 주세요.';
-    return '생성 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+    if (status === 404) return `${statusPrefix}API 엔드포인트를 찾을 수 없습니다. (404 Not Found)`;
+    if (status === 503) return `${statusPrefix}AI 서버가 혼잡합니다. 잠시 후 다시 시도해 주세요.`;
+    if (status === 504) return `${statusPrefix}요청 처리 시간이 초과되었습니다 (60초 타임아웃).`;
+    return `${statusPrefix}AI 생성 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.`;
   }
+
   if (typeof err === 'string') {
+    if (err.includes('FUNCTION_INVOCATION_FAILED')) {
+      return `${statusPrefix}Vercel 서버리스 실행 실패: Vercel Project Settings에서 GEMINI_API_KEY 환경변수가 설정되어 있는지 확인해 주세요.`;
+    }
     if (err === 'Not Found' || err.includes('404')) {
-      return '서버 엔드포인트를 찾을 수 없습니다. 서버 연결을 확인해 주세요.';
+      return `${statusPrefix}서버 API 경로를 찾을 수 없습니다. (404 Not Found)`;
     }
     try {
       const parsed = JSON.parse(err);
-      if (parsed?.error?.message) {
-        if (parsed.error.code === 503 || parsed.error.status === 'UNAVAILABLE') {
-          return 'AI 모델 서버가 일시적인 고부하 상태입니다. 잠시 후 다시 생성해 주세요.';
-        }
-        return parsed.error.message;
+      if (parsed?.error) {
+        const msg = typeof parsed.error === 'string' ? parsed.error : parsed.error.message;
+        return `${statusPrefix}${msg}`;
       }
     } catch {}
-    return err;
+    return `${statusPrefix}${err}`;
   }
+
   if (err.message) {
     return parseErrorMessage(err.message, status);
   }
-  return '서버와 통신 중 오류가 발생했습니다.';
+
+  return `${statusPrefix}서버와 통신 중 오류가 발생했습니다.`;
 }
 
 async function safeFetchJson(url: string, options: RequestInit): Promise<any> {
@@ -59,7 +66,7 @@ async function safeFetchJson(url: string, options: RequestInit): Promise<any> {
   try {
     data = JSON.parse(text);
   } catch {
-    // Not a valid JSON response (e.g., HTML 404 or text error)
+    // Non-JSON response (e.g., Vercel Gateway error or HTML)
     throw new Error(parseErrorMessage(text || response.statusText, response.status));
   }
 
