@@ -1,0 +1,78 @@
+{
+  "protocol": "pound-observe-v1",
+  "revision": "3",
+  "name": "워크젠 AI",
+  "projectId": "studio-7279538363-d9e82",
+  "databaseId": "ai-studio-7e2dd0f2-c8e1-4566-8808-a4469ba64521",
+  "loginPath": "/",
+  "firebaseConfig": {
+    "projectId": "studio-7279538363-d9e82",
+    "appId": "1:152834017745:web:8758fdcd10af5d6a51b8f0",
+    "apiKey": "AIzaSyD3nCwPAIWUMkKRb2ly_SJ8oqwnnBpQDW4",
+    "authDomain": "studio-7279538363-d9e82.firebaseapp.com",
+    "firestoreDatabaseId": "ai-studio-7e2dd0f2-c8e1-4566-8808-a4469ba64521",
+    "storageBucket": "studio-7279538363-d9e82.firebasestorage.app",
+    "messagingSenderId": "152834017745",
+    "measurementId": "",
+    "oAuthClientId": "152834017745-qo0gt0ffvu4gnsethum0uloldddmmgbi.apps.googleusercontent.com",
+    "recaptchaSiteKey": ""
+  },
+  "collections": [
+    {
+      "path": "documents",
+      "type": "전문 문서",
+      "ownerFields": [
+        "userId"
+      ]
+    },
+    {
+      "path": "presentations",
+      "type": "프레젠테이션",
+      "ownerFields": [
+        "userId"
+      ]
+    },
+    {
+      "path": "excel_documents",
+      "type": "엑셀",
+      "ownerFields": [
+        "userId"
+      ]
+    },
+    {
+      "path": "users",
+      "type": "회원",
+      "ownerFields": []
+    },
+    {
+      "path": "business_forms",
+      "type": "업무양식",
+      "group": true,
+      "ownerFields": [
+        "userId"
+      ]
+    },
+    {
+      "path": "public_images",
+      "type": "공용 이미지",
+      "ownerFields": []
+    },
+    {
+      "path": "knowledge_hub",
+      "type": "지식 허브",
+      "ownerFields": []
+    },
+    {
+      "path": "help_contents",
+      "type": "도움말",
+      "ownerFields": []
+    },
+    {
+      "path": "market_items",
+      "type": "공개 마켓",
+      "ownerFields": []
+    }
+  ],
+  "schemaCommit": "b7820d96cbbd476360ff746ae921bbbd2987ec24",
+  "schemaCoverage": "현재 소스의 실제 Firestore 경로. 조회 권한이 제한되면 관리자 소유 범위 또는 확인 불가로 표시합니다."
+}
